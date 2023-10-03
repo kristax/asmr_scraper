@@ -1,0 +1,11 @@
+JellyfinConfig:
+  host: http://nas:8096
+  apiKey: ""
+  userId: ""
+  debug: false
+AsmrOneConfig:
+  host: https://api.asmr-200.com
+  debug: false
+ScraperConfig:
+  forceUpdateInfo: false
+  forceUploadImage: false
