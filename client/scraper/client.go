@@ -6,6 +6,7 @@ import (
 	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/util/fas"
 	"context"
+	_ "embed"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/samber/lo"
@@ -13,7 +14,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 )
 
 type client struct {
@@ -81,7 +81,14 @@ func (c *client) RefreshInfo(ctx context.Context, parentId string) (*RefreshInfo
 				fmt.Println("upload image for", rjCode, "success")
 			}
 			if c.Config.ForceUpdateInfo || !getItem.LockData {
-				request := buildUpdateRequest(item.Id, rjCode, getItem.Path, workInfo)
+				projectInfo := GetProjectInfo("asmr_one", rjCode, workInfo)
+				if projectInfo == nil {
+					fmt.Printf("adaptor not found: %s", "asmr_one")
+					return
+				}
+				projectInfo.ItemId = getItem.Id
+				projectInfo.Path = getItem.Path
+				request := buildUpdateRequest(projectInfo)
 				err = c.JellyfinClient.UpdateItem(ctx, request)
 				if err != nil {
 					fmt.Printf("jellyfin update item error: %s %v\n", rjCode, err)
@@ -96,46 +103,26 @@ func (c *client) RefreshInfo(ctx context.Context, parentId string) (*RefreshInfo
 	return &RefreshInfoResult{}, nil
 }
 
-func buildUpdateRequest(itemId, rjCode, path string, workInfo *asmr_one.WorkInfoResponse) *jellyfin.UpdateItemRequest {
-	base := filepath.Base(path)
-	tags := lo.Map[*asmr_one.Tag, string](workInfo.Tags, func(item *asmr_one.Tag, _ int) string {
-		return item.Name
-	})
-	releaseDate, err := time.Parse(time.DateOnly, workInfo.Release)
-	if err != nil {
-		releaseDate = time.Now()
-	}
-	createDate, err := time.Parse(time.DateOnly, workInfo.CreateDate)
-	if err != nil {
-		createDate = time.Now()
-	}
-	artist := lo.Map[*asmr_one.Vas, *jellyfin.Subject](workInfo.Vas, func(item *asmr_one.Vas, _ int) *jellyfin.Subject {
-		return &jellyfin.Subject{
-			Name: item.Name,
-		}
-	})
-	var overviewTemplate = `<br>
-<span>%s<span><br><br>
-<span style="color: #f44336!important">%d JPY</span> &nbsp&nbsp&nbsp
-<span style="color: #ffffff!important">销量: %d</span> &nbsp&nbsp&nbsp
-<a href="https://www.dlsite.com/home/work/=/product_id/%s.html/?locale=zh_CN" target="_blank" style="color: #4992F2!important">DLsite</a>`
+func buildUpdateRequest(project *ProjectInfo) *jellyfin.UpdateItemRequest {
+	base := filepath.Base(project.Path)
+	tags := project.Tags
+	releaseDate := project.ReleaseDate
+	createDate := project.CreateDate
 	return &jellyfin.UpdateItemRequest{
-		Id: itemId,
+		Id: project.ItemId,
 		Name: func() string {
 			builder := strings.Builder{}
-			builder.WriteString(rjCode)
-			builder.WriteString(workInfo.Title)
-			if base != rjCode {
+			builder.WriteString(project.RJCode)
+			builder.WriteString(project.Name)
+			if base != project.RJCode {
 				builder.WriteString(fmt.Sprintf(" [%s]", base))
 			}
-			builder.WriteString(fmt.Sprintf(" CV: %s", strings.Join(lo.Map(workInfo.Vas, func(item *asmr_one.Vas, _ int) string {
-				return item.Name
-			}), ",")))
+			builder.WriteString(fmt.Sprintf(" CV: %s", strings.Join(project.Artists, ",")))
 			return builder.String()
 		}(),
-		OriginalTitle:           path,
-		ForcedSortName:          rjCode,
-		CommunityRating:         fmt.Sprintf("%.1f", workInfo.RateAverage2Dp),
+		OriginalTitle:           project.Path,
+		ForcedSortName:          project.RJCode,
+		CommunityRating:         fmt.Sprintf("%.1f", project.Rating),
 		CriticRating:            "",
 		IndexNumber:             nil,
 		AirsBeforeSeasonNumber:  "",
@@ -143,18 +130,20 @@ func buildUpdateRequest(itemId, rjCode, path string, workInfo *asmr_one.WorkInfo
 		AirsBeforeEpisodeNumber: "",
 		ParentIndexNumber:       nil,
 		DisplayOrder:            "",
-		Album:                   rjCode,
-		AlbumArtists:            artist,
-		ArtistItems:             []*jellyfin.Subject{{Name: workInfo.Circle.Name}},
-		Overview:                fmt.Sprintf(overviewTemplate, workInfo.Circle.Name, workInfo.Price, workInfo.DlCount, rjCode),
-		Status:                  "",
-		AirDays:                 []any{},
-		AirTime:                 "",
-		Genres:                  tags,
-		Tags:                    []string{fas.TernaryOp(workInfo.Nsfw, "R18", "全年龄")},
+		Album:                   project.RJCode,
+		AlbumArtists: lo.Map[string, *jellyfin.Subject](project.Artists, func(item string, _ int) *jellyfin.Subject {
+			return &jellyfin.Subject{Name: item}
+		}),
+		ArtistItems: []*jellyfin.Subject{{Name: project.Group}},
+		Overview:    fmt.Sprintf(overviewTemplate, project.Group, project.Price, project.Sales, project.RJCode),
+		Status:      "",
+		AirDays:     []any{},
+		AirTime:     "",
+		Genres:      tags,
+		Tags:        []string{fas.TernaryOp(project.Nsfw, "R18", "全年龄")},
 		Studios: []*jellyfin.Subject{
 			{
-				Name: workInfo.Circle.Name,
+				Name: project.Group,
 			},
 		},
 		PremiereDate:                 releaseDate,
@@ -163,7 +152,7 @@ func buildUpdateRequest(itemId, rjCode, path string, workInfo *asmr_one.WorkInfo
 		ProductionYear:               fmt.Sprintf("%d", releaseDate.Year()),
 		AspectRatio:                  "",
 		Video3DFormat:                "",
-		OfficialRating:               fas.TernaryOp(workInfo.Nsfw, "XXX", "APPROVED"),
+		OfficialRating:               fas.TernaryOp(project.Nsfw, "XXX", "APPROVED"),
 		CustomRating:                 "",
 		People:                       []any{},
 		LockData:                     true,

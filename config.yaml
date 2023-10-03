@@ -1,11 +1,11 @@
 JellyfinConfig:
-  host: http://nas:8096
-  apiKey: ""
-  userId: ""
+  host: http://m73:8096
+  apiKey: "5f77f3f3b5994d0ba1596168622f7563"
+  userId: "8e7118d28d104dd6acdad76c7ac58647"
   debug: false
 AsmrOneConfig:
   host: https://api.asmr-200.com
   debug: false
 ScraperConfig:
-  forceUpdateInfo: false
+  forceUpdateInfo: true
   forceUploadImage: false
