@@ -94,7 +94,6 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 			if err != nil {
 				return nil, err
 			}
-
 			if getItem.LockData && !c.Config.ForceUploadImage && !c.Config.ForceUpdateInfo {
 				continue
 			}

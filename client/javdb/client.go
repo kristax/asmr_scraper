@@ -44,7 +44,7 @@ func (c *client) search(ctx context.Context, avCode string) (*ListItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	box := doc.Find(".movie-list .item .box")
+	box := doc.Find(".movie-list .item .box").First()
 	var index = -1
 	box.Find(".video-title").EachWithBreak(func(i int, selection *goquery.Selection) bool {
 		if strings.Contains(strings.ToLower(selection.Text()), strings.ToLower(avCode)) {
@@ -67,15 +67,38 @@ func (c *client) search(ctx context.Context, avCode string) (*ListItem, error) {
 		return nil, fmt.Errorf("获取Key路径失败: %s", avCode)
 	}
 	result.Key = href
+	result.Title, _ = box.Attr("title")
 
-	fmt.Println(box.Children().First().Children().Attr("src"))
-	result.CoverImg, _ = box.Children().First().Children().Attr("src")
+	box.Children().First().Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
+		if img, exists := selection.Attr("src"); exists {
+			result.CoverImg = img
+			return false
+		}
+		return true
+	})
 	result.Rating, result.RateCount = RateSplit(box.Find(".score .value").Text())
-	result.ReleaseDate = box.Find(".meta").Text()
+	result.ReleaseDate = strings.ReplaceAll(strings.ReplaceAll(box.Find(".meta").First().Text(), " ", ""), "\n", "")
 	return result, nil
 }
 
 func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*Detail, error) {
+	if strings.HasPrefix(item.Code, "FC2") {
+		return &Detail{
+			Code:         item.Code,
+			Title:        item.Title,
+			OriginTitle:  item.Title,
+			CoverImg:     item.CoverImg,
+			ReleasedDate: item.ReleaseDate,
+			Duration:     "",
+			Maker:        "FC2",
+			Publisher:    "FC2",
+			Series:       "",
+			Rating:       item.Rating,
+			RateCount:    item.RateCount,
+			Tags:         []string{"素人"},
+			Actors:       []string{},
+		}, nil
+	}
 	mappingHandler, ok := infoMapping[lang]
 	if !ok {
 		return nil, fmt.Errorf("language %s not support", lang)
@@ -87,17 +110,7 @@ func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*D
 	if err != nil {
 		return nil, err
 	}
-	if !resp.IsSuccess() {
-		return &Detail{
-			Code:         item.Code,
-			Title:        item.Title,
-			OriginTitle:  item.Title,
-			CoverImg:     item.CoverImg,
-			ReleasedDate: item.ReleaseDate,
-			Rating:       item.Rating,
-			RateCount:    item.RateCount,
-		}, nil
-	}
+
 	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(resp.Body()))
 	if err != nil {
 		return nil, err
