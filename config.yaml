@@ -1,11 +1,39 @@
+App:
+  targets:
+    - id: "2aa1d857635177546f8785032805c532"
+      name: "Asmr"
+      type: "MusicAlbum"
+      async: true
+      disable: true
+    - id: "0a7fd8175719d8f7ebfb93874e55a2d5"
+      name: "Adult"
+      type: "Movie"
+      async: false
+      jitter: 5
+      disable: false
+
 JellyfinConfig:
   host: http://m73:8096
   apiKey: "5f77f3f3b5994d0ba1596168622f7563"
   userId: "8e7118d28d104dd6acdad76c7ac58647"
   debug: false
-AsmrOneConfig:
-  host: https://api.asmr-200.com
-  debug: false
+
 ScraperConfig:
-  forceUpdateInfo: true
+  query:
+    startIndex: 0
+    limit: 0
+  forceUpdateInfo: false
   forceUploadImage: false
+
+Clients:
+  AsmrOneConfig:
+    targetName: "Asmr"
+    host: https://api.asmr-200.com
+    parsePathRegex: "RJ\\d+"
+    debug: false
+  JavDBConfig:
+    targetName: "Adult"
+    host: "https://javdb.com"
+    parsePathRegex: "[a-z|A-Z|FC2]+-\\d+"
+    lang: "zh"
+    debug: false

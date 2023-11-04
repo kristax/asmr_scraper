@@ -12,7 +12,6 @@ import (
 
 var (
 	auth = `MediaBrowser Client="Asmr Scraper", Device="Golang", Version="0.0.1", Token="%s"`
-	//userId = "8e7118d28d104dd6acdad76c7ac58647"
 )
 
 type client struct {
@@ -37,14 +36,14 @@ func (c *client) Init() error {
 	return nil
 }
 
-func (c *client) GetItems(ctx context.Context, parentId string, options ...restyop.Option) (*ItemsResponse, error) {
+func (c *client) GetItems(ctx context.Context, parentId, itemType string, options ...restyop.Option) (*ItemsResponse, error) {
 	var result = &ItemsResponse{}
 	r := c.client.R().
 		SetContext(ctx).
 		SetQueryParams(map[string]string{
 			"SortBy":           "DateCreated%2CSortName",
 			"SortOrder":        "Descending",
-			"IncludeItemTypes": "MusicAlbum",
+			"IncludeItemTypes": itemType,
 			"Recursive":        "true",
 			"Fields":           "PrimaryImageAspectRatio%2CSortName%2CBasicSyncInfo",
 			"ImageTypeLimit":   "1",

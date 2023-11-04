@@ -2,28 +2,38 @@ package main
 
 import (
 	"asmr_scraper/client/scraper"
+	"asmr_scraper/model"
+	"bufio"
 	"context"
+	"fmt"
 	"github.com/go-kid/ioc"
 	ap "github.com/go-kid/ioc/app"
+	"os"
 )
 
-type app struct {
-	Scraper scraper.Client `wire:""`
-}
-
-var App = &app{}
-
-func init() {
-	ioc.Register(App)
+type App struct {
+	Targets []*model.Target `prop:"App.targets"`
+	Scraper scraper.Client  `wire:""`
 }
 
 func main() {
-	err := ioc.Run(ap.SetDefaultConfigure(), ap.SetConfig("config.yaml"))
+	var app = &App{}
+	_, err := ioc.Run(ap.SetConfig("config.yaml"), ap.SetComponents(app))
 	if err != nil {
 		panic(err)
 	}
-	_, err = App.Scraper.RefreshInfo(context.Background(), "2aa1d857635177546f8785032805c532")
-	if err != nil {
-		panic(err)
+
+	for _, parent := range app.Targets {
+		if parent.Disable {
+			continue
+		}
+		_, err = app.Scraper.RefreshInfo(context.Background(), parent)
+		if err != nil {
+			fmt.Printf("refresh target %s:%s failed %v\n", parent.Id, parent.Name, err)
+			continue
+		}
 	}
+	fmt.Println("refresh finished, press any key to exit")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
 }

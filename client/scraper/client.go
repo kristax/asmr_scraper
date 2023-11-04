@@ -1,27 +1,30 @@
 package scraper
 
 import (
-	"asmr_scraper/client/asmr_one"
 	"asmr_scraper/client/downloader"
 	"asmr_scraper/client/jellyfin"
-	"asmr_scraper/util/fas"
+	"asmr_scraper/model"
 	"context"
 	_ "embed"
 	"fmt"
+	"github.com/go-kid/ioc/util/reflectx"
 	"github.com/go-resty/resty/v2"
 	"github.com/samber/lo"
-	"path/filepath"
-	"regexp"
-	"strings"
+	"log"
+	"sort"
+	"strconv"
 	"sync"
+	"time"
 )
 
 type client struct {
-	AsmrClient     asmr_one.Client   `wire:""`
+	//AsmrClient     asmr_one.Client   `wire:""`
 	JellyfinClient jellyfin.Client   `wire:""`
+	Clients        []SourceClient    `wire:""`
 	Downloader     downloader.Client `wire:""`
 	Config         *Config
-	rjExp          *regexp.Regexp
+
+	clientsMap map[string][]SourceClient
 }
 
 func NewClient() Client {
@@ -29,18 +32,28 @@ func NewClient() Client {
 }
 
 func (c *client) Init() error {
-	rjExp, err := regexp.Compile("RJ\\d+")
-	if err != nil {
-		return err
+	c.clientsMap = lo.GroupBy(c.Clients, func(item SourceClient) string {
+		return item.TargetName()
+	})
+	for key, _ := range c.clientsMap {
+		sort.Slice(c.clientsMap[key], func(i, j int) bool {
+			return c.clientsMap[key][i].Order() < c.clientsMap[key][j].Order()
+		})
 	}
-	c.rjExp = rjExp
 	return nil
 }
 
-func (c *client) RefreshInfo(ctx context.Context, parentId string) (*RefreshInfoResult, error) {
-	itemsResponse, err := c.JellyfinClient.GetItems(ctx, parentId, func(r *resty.Request) {
-		//r.SetQueryParam("StartIndex", "0")
-		//r.SetQueryParam("Limit", "1")
+func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*RefreshInfoResult, error) {
+	clients, ok := c.clientsMap[target.Name]
+	if !ok {
+		return nil, fmt.Errorf("none source clients for %s", target.Name)
+	}
+	itemsResponse, err := c.JellyfinClient.GetItems(ctx, target.Id, target.Type, func(r *resty.Request) {
+		if c.Config.Query.StartIndex == 0 && c.Config.Query.Limit == 0 {
+			return
+		}
+		r.SetQueryParam("StartIndex", strconv.Itoa(c.Config.Query.StartIndex))
+		r.SetQueryParam("Limit", strconv.Itoa(c.Config.Query.Limit))
 	})
 	if err != nil {
 		return nil, err
@@ -51,115 +64,95 @@ func (c *client) RefreshInfo(ctx context.Context, parentId string) (*RefreshInfo
 		}
 	}()
 	total := len(itemsResponse.Items)
-	wg := sync.WaitGroup{}
-	wg.Add(total)
-	for i, item := range itemsResponse.Items {
-		go func(i int, item *jellyfin.Items) {
-			defer wg.Done()
-			//timerStart := time.Now()
+	if total < 1 {
+		return nil, nil
+	}
+	if target.Async {
+		wg := sync.WaitGroup{}
+		wg.Add(total)
+		for i, item := range itemsResponse.Items {
+			go func(i int, item *jellyfin.Items) {
+				defer wg.Done()
+				getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if getItem.LockData && !c.Config.ForceUploadImage && !c.Config.ForceUpdateInfo {
+					return
+				}
+				err = c.UpdateInfo(ctx, getItem, clients)
+				if err != nil {
+					fmt.Printf("update item failed: %v\n", err)
+				}
+			}(i, item)
+		}
+		wg.Wait()
+	} else {
+		for _, item := range itemsResponse.Items {
 			getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
-			rjCode := c.rjExp.FindString(getItem.Path)
-			workInfo, err := c.AsmrClient.GetWorkInfo(ctx, rjCode)
+
+			if getItem.LockData && !c.Config.ForceUploadImage && !c.Config.ForceUpdateInfo {
+				continue
+			}
+			err = c.UpdateInfo(ctx, getItem, clients)
 			if err != nil {
-				fmt.Printf("asmr one error: %s %v\n", rjCode, err)
-				return
+				fmt.Printf("update item failed: %v\n", err)
 			}
-			if c.Config.ForceUploadImage || !getItem.LockData {
-				cover, err := c.Downloader.Download(ctx, workInfo.MainCoverUrl)
-				if err != nil {
-					fmt.Printf("downloader error: %s %v\n", rjCode, err)
-					return
-				}
-				err = c.JellyfinClient.UploadPrimaryImage(ctx, item.Id, cover)
-				if err != nil {
-					fmt.Printf("jellyfin upload image error: %s %v\n", rjCode, err)
-					return
-				}
-				fmt.Println("upload image for", rjCode, "success")
-			}
-			if c.Config.ForceUpdateInfo || !getItem.LockData {
-				projectInfo := GetProjectInfo("asmr_one", rjCode, workInfo)
-				if projectInfo == nil {
-					fmt.Printf("adaptor not found: %s", "asmr_one")
-					return
-				}
-				projectInfo.ItemId = getItem.Id
-				projectInfo.Path = getItem.Path
-				request := buildUpdateRequest(projectInfo)
-				err = c.JellyfinClient.UpdateItem(ctx, request)
-				if err != nil {
-					fmt.Printf("jellyfin update item error: %s %v\n", rjCode, err)
-					return
-				}
-				fmt.Println("update info for", rjCode, "success")
-			}
-			//fmt.Printf("[%d/%d] refresh %s succeed, title: %s, cost: %v\n", i+1, total, rjCode, workInfo.Title, time.Now().Sub(timerStart))
-		}(i, item)
+			time.Sleep(time.Second * time.Duration(target.Jitter))
+		}
 	}
-	wg.Wait()
+
 	return &RefreshInfoResult{}, nil
 }
 
-func buildUpdateRequest(project *ProjectInfo) *jellyfin.UpdateItemRequest {
-	base := filepath.Base(project.Path)
-	tags := project.Tags
-	releaseDate := project.ReleaseDate
-	createDate := project.CreateDate
-	return &jellyfin.UpdateItemRequest{
-		Id: project.ItemId,
-		Name: func() string {
-			builder := strings.Builder{}
-			builder.WriteString(project.RJCode)
-			builder.WriteString(project.Name)
-			if base != project.RJCode {
-				builder.WriteString(fmt.Sprintf(" [%s]", base))
-			}
-			builder.WriteString(fmt.Sprintf(" CV: %s", strings.Join(project.Artists, ",")))
-			return builder.String()
-		}(),
-		OriginalTitle:           project.Path,
-		ForcedSortName:          project.RJCode,
-		CommunityRating:         fmt.Sprintf("%.1f", project.Rating),
-		CriticRating:            "",
-		IndexNumber:             nil,
-		AirsBeforeSeasonNumber:  "",
-		AirsAfterSeasonNumber:   "",
-		AirsBeforeEpisodeNumber: "",
-		ParentIndexNumber:       nil,
-		DisplayOrder:            "",
-		Album:                   project.RJCode,
-		AlbumArtists: lo.Map[string, *jellyfin.Subject](project.Artists, func(item string, _ int) *jellyfin.Subject {
-			return &jellyfin.Subject{Name: item}
-		}),
-		ArtistItems: []*jellyfin.Subject{{Name: project.Group}},
-		Overview:    fmt.Sprintf(overviewTemplate, project.Group, project.Price, project.Sales, project.RJCode),
-		Status:      "",
-		AirDays:     []any{},
-		AirTime:     "",
-		Genres:      tags,
-		Tags:        []string{fas.TernaryOp(project.Nsfw, "R18", "全年龄")},
-		Studios: []*jellyfin.Subject{
-			{
-				Name: project.Group,
-			},
-		},
-		PremiereDate:                 releaseDate,
-		DateCreated:                  createDate,
-		EndDate:                      nil,
-		ProductionYear:               fmt.Sprintf("%d", releaseDate.Year()),
-		AspectRatio:                  "",
-		Video3DFormat:                "",
-		OfficialRating:               fas.TernaryOp(project.Nsfw, "XXX", "APPROVED"),
-		CustomRating:                 "",
-		People:                       []any{},
-		LockData:                     true,
-		LockedFields:                 []any{},
-		ProviderIds:                  &jellyfin.ProviderIds{},
-		PreferredMetadataLanguage:    "",
-		PreferredMetadataCountryCode: "",
-		Taglines:                     []any{},
+func (c *client) UpdateInfo(ctx context.Context, getItem *jellyfin.ItemInfoResponse, clients []SourceClient) error {
+	var projectInfo *model.ProjectInfo
+	for _, cli := range clients {
+		clientId := reflectx.Id(cli)
+		code, err := cli.ParseCodeFromPath(ctx, getItem.Path)
+		if err != nil || code == "" {
+			fmt.Printf("client %s parse code from path %s failed: %v\n", clientId, getItem.Path, err)
+			continue
+		}
+		projectInfo, err = cli.GetProjectInfo(ctx, code)
+		if err != nil || projectInfo == nil {
+			fmt.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
+			continue
+		}
+		projectInfo.ItemId = getItem.Id
+		projectInfo.Path = getItem.Path
+		projectInfo.Code = code
+		break
 	}
+	if projectInfo == nil {
+		return fmt.Errorf("all clients failed to build project info")
+	}
+
+	if c.Config.ForceUploadImage || !getItem.LockData {
+		cover, err := c.Downloader.Download(ctx, projectInfo.PrimaryImageUrl)
+		if err != nil {
+			fmt.Printf("downloader error: %s %v\n", projectInfo.Code, err)
+			goto STAGE2
+		}
+		err = c.JellyfinClient.UploadPrimaryImage(ctx, projectInfo.ItemId, cover)
+		if err != nil {
+			fmt.Printf("jellyfin upload image error: %s %v\n", projectInfo.Code, err)
+			goto STAGE2
+		}
+		fmt.Println("upload image for", projectInfo.Code, "success")
+	}
+STAGE2:
+	if c.Config.ForceUpdateInfo || !getItem.LockData {
+		err := c.JellyfinClient.UpdateItem(ctx, projectInfo.ToJellyfinUpdateItemReq())
+		if err != nil {
+			fmt.Printf("jellyfin update item error: %s %v\n", projectInfo.Code, err)
+			return nil
+		}
+		fmt.Println("update info for", projectInfo.Code, "success")
+	}
+	return nil
 }
