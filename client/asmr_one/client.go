@@ -67,8 +67,14 @@ func asmrOneAdaptor(rjCode string, workInfo *WorkInfoResponse) *model.ProjectInf
 	if err != nil {
 		createDate = time.Now()
 	}
-	artist := lo.Map[*Vas, string](workInfo.Vas, func(item *Vas, _ int) string {
-		return item.Name
+	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) *model.People {
+		return &model.People{
+			Name:     item.Name,
+			Type:     model.TypeActor,
+			Role:     "CV",
+			Gender:   "female",
+			HomePage: "",
+		}
 	})
 	return &model.ProjectInfo{
 		ItemId:          "",
@@ -78,7 +84,7 @@ func asmrOneAdaptor(rjCode string, workInfo *WorkInfoResponse) *model.ProjectInf
 		Tags:            tags,
 		ReleaseDate:     releaseDate,
 		CreateDate:      createDate,
-		Artists:         artist,
+		People:          artist,
 		Rating:          workInfo.RateAverage2Dp,
 		Group:           workInfo.Circle.Name,
 		Nsfw:            workInfo.Nsfw,

@@ -19,7 +19,7 @@ type ProjectInfo struct {
 	Tags            []string
 	ReleaseDate     time.Time
 	CreateDate      time.Time
-	Artists         []string
+	People          []*People
 	Rating          float64
 	Group           string
 	Nsfw            bool
@@ -28,6 +28,25 @@ type ProjectInfo struct {
 	Overview        string
 	PrimaryImageUrl string
 }
+
+type People struct {
+	Name     string
+	Type     PeopleType
+	Role     string
+	Gender   string
+	HomePage string
+}
+
+type PeopleType string
+
+const (
+	TypeActor     PeopleType = "Actor"
+	TypeComposer  PeopleType = "Composer"
+	TypeDirector  PeopleType = "Director"
+	TypeGuestStar PeopleType = "GuestStar"
+	TypeProducer  PeopleType = "Producer"
+	TypeWriter    PeopleType = "Writer"
+)
 
 func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 	base := filepath.Base(p.Path)
@@ -41,7 +60,6 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 			if base != p.Code {
 				builder.WriteString(fmt.Sprintf(" [%s]", base))
 			}
-			builder.WriteString(fmt.Sprintf(" Actors: %s", strings.Join(p.Artists, ",")))
 			return builder.String()
 		}(),
 		OriginalTitle:           fas.TernaryOp(p.Name2 == "", p.Path, p.Name2),
@@ -55,31 +73,36 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 		ParentIndexNumber:       nil,
 		DisplayOrder:            "",
 		Album:                   p.Code,
-		AlbumArtists: lo.Map[string, *jellyfin.Subject](p.Artists, func(item string, _ int) *jellyfin.Subject {
-			return &jellyfin.Subject{Name: item}
+		AlbumArtists: lo.Map(p.People, func(item *People, _ int) *jellyfin.Subject {
+			return &jellyfin.Subject{Name: item.Name}
 		}),
 		ArtistItems: []*jellyfin.Subject{{Name: p.Group}},
-		//Overview:    fmt.Sprintf(p.OverviewTemplate, p.Group, p.Price, p.Sales, p.Code),
-		Overview: p.Overview,
-		Status:   "",
-		AirDays:  []any{},
-		AirTime:  "",
-		Genres:   p.Tags,
-		Tags:     []string{fas.TernaryOp(p.Nsfw, "R18", "全年龄")},
+		Overview:    p.Overview,
+		Status:      "",
+		AirDays:     []any{},
+		AirTime:     "",
+		Genres:      p.Tags,
+		Tags:        []string{fas.TernaryOp(p.Nsfw, "R18", "全年龄")},
 		Studios: []*jellyfin.Subject{
 			{
 				Name: p.Group,
 			},
 		},
-		PremiereDate:                 p.ReleaseDate,
-		DateCreated:                  p.CreateDate,
-		EndDate:                      nil,
-		ProductionYear:               fmt.Sprintf("%d", p.ReleaseDate.Year()),
-		AspectRatio:                  "",
-		Video3DFormat:                "",
-		OfficialRating:               fas.TernaryOp(p.Nsfw, "XXX", "APPROVED"),
-		CustomRating:                 "",
-		People:                       []any{},
+		PremiereDate:   p.ReleaseDate,
+		DateCreated:    p.CreateDate,
+		EndDate:        nil,
+		ProductionYear: fmt.Sprintf("%d", p.ReleaseDate.Year()),
+		AspectRatio:    "",
+		Video3DFormat:  "",
+		OfficialRating: fas.TernaryOp(p.Nsfw, "XXX", "APPROVED"),
+		CustomRating:   "",
+		People: lo.Map(p.People, func(item *People, index int) *jellyfin.People {
+			return &jellyfin.People{
+				Name: item.Name,
+				Type: string(item.Type),
+				Role: item.Role,
+			}
+		}),
 		LockData:                     true,
 		LockedFields:                 []any{},
 		ProviderIds:                  &jellyfin.ProviderIds{},

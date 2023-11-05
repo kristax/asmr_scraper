@@ -131,13 +131,19 @@ type UpdateItemRequest struct {
 	Video3DFormat                string        `json:"Video3DFormat"`
 	OfficialRating               string        `json:"OfficialRating"`
 	CustomRating                 string        `json:"CustomRating"`
-	People                       []interface{} `json:"People"`
+	People                       []*People     `json:"People"`
 	LockData                     bool          `json:"LockData"`
 	LockedFields                 []interface{} `json:"LockedFields"`
 	ProviderIds                  *ProviderIds  `json:"ProviderIds"`
 	PreferredMetadataLanguage    string        `json:"PreferredMetadataLanguage"`
 	PreferredMetadataCountryCode string        `json:"PreferredMetadataCountryCode"`
 	Taglines                     []interface{} `json:"Taglines"`
+}
+
+type People struct {
+	Name string `json:"Name"`
+	Type string `json:"Type"`
+	Role string `json:"Role"`
 }
 
 type ProviderIds struct {

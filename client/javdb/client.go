@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-kid/ioc/util/fas"
+	"github.com/samber/lo"
 	"strings"
 	"time"
 )
@@ -93,10 +95,10 @@ func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*D
 			Rating:       item.Rating,
 			RateCount:    item.RateCount,
 			Tags:         []string{"素人"},
-			Actors:       []string{},
+			Actors:       []*Actor{},
 		}, nil
 	}
-	mappingHandler, ok := infoMapping[lang]
+	categoryMapping, ok := infoMapping[lang]
 	if !ok {
 		return nil, fmt.Errorf("language %s not support", lang)
 	}
@@ -126,8 +128,8 @@ func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*D
 
 	meta.Find(".movie-panel-info .panel-block").Each(func(i int, selection *goquery.Selection) {
 		key := selection.Children().First().Text()
-		if f, ok := mappingHandler[key]; ok {
-			f(result, selection.Find(".value"))
+		if category, ok := categoryMapping[key]; ok {
+			handlerMapping[category](result, selection.Find(".value"))
 		}
 	})
 	return result, nil
@@ -144,15 +146,36 @@ func (c *client) GetProjectInfo(ctx context.Context, code string) (*model.Projec
 		releaseDate = time.Now()
 	}
 	return &model.ProjectInfo{
-		ItemId:          "",
-		Code:            detail.Code,
-		Path:            "",
-		Name:            detail.Title,
-		Name2:           detail.OriginTitle,
-		Tags:            detail.Tags,
-		ReleaseDate:     releaseDate,
-		CreateDate:      time.Now(),
-		Artists:         detail.Actors,
+		ItemId:      "",
+		Code:        detail.Code,
+		Path:        "",
+		Name:        detail.Title,
+		Name2:       detail.OriginTitle,
+		Tags:        detail.Tags,
+		ReleaseDate: releaseDate,
+		CreateDate:  time.Now(),
+		People: func() []*model.People {
+			var people []*model.People
+			if len(detail.Actors) > 0 {
+				people = append(people, lo.Map(detail.Actors, func(item *Actor, index int) *model.People {
+					return &model.People{
+						Name:     item.Name,
+						Type:     model.TypeActor,
+						Role:     fas.TernaryOp(item.Gender == "male", "男演员", "女优"),
+						Gender:   item.Gender,
+						HomePage: item.HomePage,
+					}
+				})...)
+			}
+			if detail.Director != nil {
+				people = append(people, &model.People{
+					Name:     detail.Director.Name,
+					Type:     model.TypeDirector,
+					HomePage: detail.Director.HomePage,
+				})
+			}
+			return people
+		}(),
 		Rating:          detail.Rating,
 		Group:           detail.Maker,
 		Nsfw:            true,

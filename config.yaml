@@ -4,7 +4,7 @@ App:
       name: "Asmr"
       type: "MusicAlbum"
       async: true
-      disable: true
+      disable: false
     - id: "0a7fd8175719d8f7ebfb93874e55a2d5"
       name: "Adult"
       type: "Movie"
@@ -22,7 +22,7 @@ ScraperConfig:
   query:
     startIndex: 0
     limit: 0
-  forceUpdateInfo: false
+  forceUpdateInfo: true
   forceUploadImage: false
 
 Clients:
