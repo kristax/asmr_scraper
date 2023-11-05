@@ -34,6 +34,6 @@ Clients:
   JavDBConfig:
     targetName: "Adult"
     host: "https://javdb.com"
-    parsePathRegex: "[a-z|A-Z|FC2]+-\\d+"
+    parsePathRegex: "[a-z|A-Z|FC2]+-\\d+[a-z|A-Z]?"
     lang: "zh"
     debug: false

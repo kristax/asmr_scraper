@@ -12,7 +12,7 @@ import (
 func Test_client_Search(t *testing.T) {
 	c := NewClient()
 	ioc.RunTest(t, app.SetComponents(c), app.SetConfig("../../config.yaml"))
-	detail, err := c.Get(context.Background(), "FC2-3163986", "zh")
+	detail, err := c.Get(context.Background(), "STAR-907", "zh")
 	//detail, err := c.Get(context.Background(), "JUKF-045", "zh")
 	assert.NoError(t, err)
 	fmt.Println(detail)

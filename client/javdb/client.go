@@ -44,17 +44,12 @@ func (c *client) search(ctx context.Context, avCode string) (*ListItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	box := doc.Find(".movie-list .item .box").First()
-	var index = -1
-	box.Find(".video-title").EachWithBreak(func(i int, selection *goquery.Selection) bool {
-		if strings.Contains(strings.ToLower(selection.Text()), strings.ToLower(avCode)) {
-			index = i
-			return false
-		}
-		return true
-	})
+	box := doc.Find(".movie-list .item .box")
+	matchedItem := box.FilterFunction(func(i int, selection *goquery.Selection) bool {
+		return strings.Contains(strings.ToLower(selection.Find(".video-title").Text()), strings.ToLower(avCode))
+	}).First()
 
-	if index == -1 {
+	if matchedItem == nil || matchedItem.Text() == "" {
 		return nil, fmt.Errorf("未找到该项目: %s", avCode)
 	}
 
@@ -62,27 +57,29 @@ func (c *client) search(ctx context.Context, avCode string) (*ListItem, error) {
 		Code: avCode,
 	}
 
-	href, ok := box.Attr("href")
+	href, ok := matchedItem.Attr("href")
 	if !ok {
 		return nil, fmt.Errorf("获取Key路径失败: %s", avCode)
 	}
 	result.Key = href
-	result.Title, _ = box.Attr("title")
+	result.Title, _ = matchedItem.Attr("title")
 
-	box.Children().First().Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
-		if img, exists := selection.Attr("src"); exists {
+	matchedItem.Find(".cover").Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
+		img, exists := selection.Attr("src")
+		if exists {
 			result.CoverImg = img
 			return false
 		}
 		return true
 	})
-	result.Rating, result.RateCount = RateSplit(box.Find(".score .value").Text())
-	result.ReleaseDate = strings.ReplaceAll(strings.ReplaceAll(box.Find(".meta").First().Text(), " ", ""), "\n", "")
+
+	result.Rating, result.RateCount = RateSplit(matchedItem.Find(".score .value").Text())
+	result.ReleaseDate = strings.ReplaceAll(strings.ReplaceAll(matchedItem.Find(".meta").First().Text(), " ", ""), "\n", "")
 	return result, nil
 }
 
 func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*Detail, error) {
-	if strings.HasPrefix(item.Code, "FC2") {
+	if strings.HasPrefix(strings.ToUpper(item.Code), "FC2") {
 		return &Detail{
 			Code:         item.Code,
 			Title:        item.Title,
