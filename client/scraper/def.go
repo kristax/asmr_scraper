@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
 	"context"
 )
@@ -12,6 +13,8 @@ type Client interface {
 type SourceClient interface {
 	TargetName() string
 	Order() int
-	ParseCodeFromPath(ctx context.Context, path string) (string, error)
+	ParseCode(ctx context.Context, item *jellyfin.ItemInfoResponse) (string, error)
 	GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error)
+	ImageMissing(item *jellyfin.ItemInfoResponse) bool
+	InfoMissing(item *jellyfin.ItemInfoResponse) bool
 }

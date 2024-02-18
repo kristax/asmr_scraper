@@ -13,12 +13,9 @@ import (
 	"log"
 	"sort"
 	"strconv"
-	"sync"
-	"time"
 )
 
 type client struct {
-	//AsmrClient     asmr_one.Client   `wire:""`
 	JellyfinClient jellyfin.Client   `wire:""`
 	Clients        []SourceClient    `wire:""`
 	Downloader     downloader.Client `wire:""`
@@ -60,98 +57,128 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	}()
 	total := len(itemsResponse.Items)
 	if total < 1 {
 		return nil, nil
 	}
-	if target.Async {
-		wg := sync.WaitGroup{}
-		wg.Add(total)
-		for i, item := range itemsResponse.Items {
-			go func(i int, item *jellyfin.Items) {
-				defer wg.Done()
-				getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if getItem.LockData && !c.Config.ForceUploadImage && !c.Config.ForceUpdateInfo {
-					return
-				}
-				err = c.UpdateInfo(ctx, getItem, clients)
-				if err != nil {
-					fmt.Printf("update item failed: %v\n", err)
-				}
-			}(i, item)
-		}
-		wg.Wait()
-	} else {
-		for _, item := range itemsResponse.Items {
-			getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
-			if err != nil {
-				return nil, err
-			}
-			if getItem.LockData && !c.Config.ForceUploadImage && !c.Config.ForceUpdateInfo {
-				continue
-			}
-			err = c.UpdateInfo(ctx, getItem, clients)
-			if err != nil {
-				fmt.Printf("update item failed: %v\n", err)
-			}
-			time.Sleep(time.Second * time.Duration(target.Jitter))
-		}
-	}
+	wrappers := c.getProjectsInfo(ctx, itemsResponse.Items, clients)
+	c.updateInfos(ctx, wrappers)
+	//if target.Async {
+	//	wg := sync.WaitGroup{}
+	//	wg.Add(total)
+	//	for i, item := range itemsResponse.Items {
+	//		go func(i int, item *jellyfin.Items) {
+	//			defer wg.Done()
+	//			getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
+	//			if err != nil {
+	//				log.Printf("jelly client get item error: %v %#v\n", err, item)
+	//				return
+	//			}
+	//			err = c.UpdateInfo(ctx, getItem, clients)
+	//			if err != nil {
+	//				log.Printf("jelly client update item failed: %v\n", err)
+	//			}
+	//		}(i, item)
+	//	}
+	//	wg.Wait()
+	//} else {
+	//	for _, item := range itemsResponse.Items {
+	//		getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
+	//		if err != nil {
+	//			log.Printf("jelly client get item error: %v %#v\n", err, item)
+	//			return nil, err
+	//		}
+	//		err = c.UpdateInfo(ctx, getItem, clients)
+	//		if err != nil {
+	//			log.Printf("jelly client update item failed: %v\n", err)
+	//		}
+	//		time.Sleep(time.Second * time.Duration(target.Jitter))
+	//	}
+	//}
 
 	return &RefreshInfoResult{}, nil
 }
 
-func (c *client) UpdateInfo(ctx context.Context, getItem *jellyfin.ItemInfoResponse, clients []SourceClient) error {
-	var projectInfo *model.ProjectInfo
-	for _, cli := range clients {
-		clientId := reflectx.Id(cli)
-		code, err := cli.ParseCodeFromPath(ctx, getItem.Path)
-		if err != nil || code == "" {
-			fmt.Printf("client %s parse code from path %s failed: %v\n", clientId, getItem.Path, err)
-			continue
-		}
-		projectInfo, err = cli.GetProjectInfo(ctx, code)
-		if err != nil || projectInfo == nil {
-			fmt.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
-			continue
-		}
-		projectInfo.ItemId = getItem.Id
-		projectInfo.Path = getItem.Path
-		projectInfo.Code = code
-		break
-	}
-	if projectInfo == nil {
-		return fmt.Errorf("all clients failed to build project info")
-	}
+type projectWrapper struct {
+	projectInfo  *model.ProjectInfo
+	missingImage bool
+	missingInfo  bool
+}
 
-	if c.Config.ForceUploadImage || !getItem.LockData {
-		cover, err := c.Downloader.Download(ctx, projectInfo.PrimaryImageUrl)
+func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, clients []SourceClient) []*projectWrapper {
+	var projectInfos []*projectWrapper
+	for _, respItem := range items {
+		item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
 		if err != nil {
-			fmt.Printf("downloader error: %s %v\n", projectInfo.Code, err)
-			goto STAGE2
+			log.Printf("jelly client get item error: %v %#v\n", err, item.Path)
+			continue
 		}
-		err = c.JellyfinClient.UploadPrimaryImage(ctx, projectInfo.ItemId, cover)
-		if err != nil {
-			fmt.Printf("jellyfin upload image error: %s %v\n", projectInfo.Code, err)
-			goto STAGE2
+		var (
+			projectInfo  *model.ProjectInfo
+			missingImage bool
+			missingInfo  bool
+		)
+		for _, cli := range clients {
+			clientId := reflectx.Id(cli)
+			missingImage = cli.ImageMissing(item)
+			missingInfo = cli.InfoMissing(item)
+			if !missingImage && !missingInfo {
+				continue
+			}
+			code, err := cli.ParseCode(ctx, item)
+			if err != nil {
+				log.Printf("client %s parse code failed: %v\n", clientId, err)
+				continue
+			}
+			projectInfo, err = cli.GetProjectInfo(ctx, code)
+			if err != nil {
+				log.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
+				continue
+			}
+			projectInfo.ItemId = item.Id
+			projectInfo.Path = item.Path
+			projectInfo.Code = code
+			break
 		}
-		fmt.Println("upload image for", projectInfo.Code, "success")
+		if projectInfo == nil && (missingInfo || missingImage) {
+			log.Printf("all clients failed to build project info for %s", item.Path)
+			continue
+		}
+		projectInfos = append(projectInfos, &projectWrapper{
+			projectInfo:  projectInfo,
+			missingImage: missingImage,
+			missingInfo:  missingInfo,
+		})
 	}
-STAGE2:
-	if c.Config.ForceUpdateInfo || !getItem.LockData {
-		err := c.JellyfinClient.UpdateItem(ctx, projectInfo.ToJellyfinUpdateItemReq())
-		if err != nil {
-			fmt.Printf("jellyfin update item error: %s %v\n", projectInfo.Code, err)
-			return nil
+	return projectInfos
+}
+
+func (c *client) updateInfos(ctx context.Context, wrappers []*projectWrapper) {
+	for _, wrapper := range wrappers {
+		if wrapper.missingImage {
+			cover, err := c.Downloader.Download(ctx, wrapper.projectInfo.PrimaryImageUrl)
+			if err != nil {
+				log.Printf("downloader error: %s %v\n", wrapper.projectInfo.Code, err)
+				goto STAGE2
+			}
+			err = c.JellyfinClient.UploadPrimaryImage(ctx, wrapper.projectInfo.ItemId, cover)
+			if err != nil {
+				log.Printf("jellyfin upload image error: %s %v\n", wrapper.projectInfo.Code, err)
+				goto STAGE2
+			}
+			log.Println("upload image for", wrapper.projectInfo.Code, "success")
 		}
-		fmt.Println("update info for", projectInfo.Code, "success")
+	STAGE2:
+		if wrapper.missingInfo {
+			err := c.JellyfinClient.UpdateItem(ctx, wrapper.projectInfo.ToJellyfinUpdateItemReq())
+			if err != nil {
+				log.Printf("jellyfin update item error: %s %v\n", wrapper.projectInfo.Code, err)
+				return
+			}
+			log.Println("update info for", wrapper.projectInfo.Code, "success")
+		}
 	}
-	return nil
 }

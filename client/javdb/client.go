@@ -136,6 +136,7 @@ func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*D
 }
 
 func (c *client) GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error) {
+	time.Sleep(time.Second * 5)
 	detail, err := c.Get(ctx, code, c.Lang)
 	if err != nil {
 		return nil, err

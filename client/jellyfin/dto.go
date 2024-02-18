@@ -45,6 +45,7 @@ type Subject struct {
 
 type ItemInfoResponse struct {
 	Name                         string        `json:"Name"`
+	OriginalTitle                string        `json:"OriginalTitle"`
 	ServerId                     string        `json:"ServerId"`
 	Id                           string        `json:"Id"`
 	Etag                         string        `json:"Etag"`
@@ -88,6 +89,7 @@ type ItemInfoResponse struct {
 	Artists                      []interface{} `json:"Artists"`
 	ArtistItems                  []interface{} `json:"ArtistItems"`
 	AlbumArtists                 []interface{} `json:"AlbumArtists"`
+	AlbumArtist                  string        `json:"AlbumArtist"`
 	ImageTags                    struct {
 		Primary string `json:"Primary"`
 	} `json:"ImageTags"`

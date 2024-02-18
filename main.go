@@ -5,9 +5,9 @@ import (
 	"asmr_scraper/model"
 	"bufio"
 	"context"
-	"fmt"
 	"github.com/go-kid/ioc"
 	ap "github.com/go-kid/ioc/app"
+	"log"
 	"os"
 )
 
@@ -29,11 +29,11 @@ func main() {
 		}
 		_, err = app.Scraper.RefreshInfo(context.Background(), parent)
 		if err != nil {
-			fmt.Printf("refresh target %s:%s failed %v\n", parent.Id, parent.Name, err)
+			log.Printf("refresh target %s:%s failed %v\n", parent.Id, parent.Name, err)
 			continue
 		}
 	}
-	fmt.Println("refresh finished, press any key to exit")
+	log.Println("refresh finished, press any key to exit")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
 }

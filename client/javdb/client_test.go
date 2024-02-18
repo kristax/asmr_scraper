@@ -2,7 +2,6 @@ package javdb
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-kid/ioc"
 	"github.com/go-kid/ioc/app"
 	"github.com/stretchr/testify/assert"
@@ -15,5 +14,5 @@ func Test_client_Search(t *testing.T) {
 	detail, err := c.Get(context.Background(), "STAR-907", "zh")
 	//detail, err := c.Get(context.Background(), "JUKF-045", "zh")
 	assert.NoError(t, err)
-	fmt.Println(detail)
+	log.Println(detail)
 }

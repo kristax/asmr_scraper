@@ -68,8 +68,8 @@ github.com/gabriel-vasile/mimetype v1.4.2/go.mod h1:zApsH/mKG4w07erKIaJPFiX0Tsq9
 github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20191125211704-12ad95a8df72/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20200222043503-6f7a984d4dc4/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
-github.com/go-kid/ioc v1.2.7 h1:xf1STefVSDR0y+ruTWIUOKLb4leNDjL9yF7ramg1LdI=
-github.com/go-kid/ioc v1.2.7/go.mod h1:s27GlN7mJe7ifBYe+oqRrTMKwk+sB+wgYM+YsLZ1Jsc=
+github.com/go-kid/ioc v1.2.13 h1:dB/nSVvC+XvU5arq14ugd50NmdtOwZOLAbve1Wemd2w=
+github.com/go-kid/ioc v1.2.13/go.mod h1:qHu/HpzxxlNGFtTHeRoZ7yFoWEtsFhtv3wN2HXg899s=
 github.com/go-resty/resty/v2 v2.7.0 h1:me+K9p3uhSmXtrBZ4k9jcEAfJmuC8IivWHwaLZwPrFY=
 github.com/go-resty/resty/v2 v2.7.0/go.mod h1:9PWDzw47qPphMRFfhsyk0NnSgvluHcljSMVIq3w7q0I=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=

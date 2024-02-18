@@ -1,6 +1,7 @@
 package asmr_one
 
 import (
+	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
 	"context"
 	"errors"
@@ -46,6 +47,9 @@ func (c *client) GetWorkInfo(ctx context.Context, rj string) (*WorkInfoResponse,
 	}
 	return result, nil
 }
+func (c *client) InfoMissing(item *jellyfin.ItemInfoResponse) bool {
+	return c.ClientBase.InfoMissing(item) || item.AlbumArtist == "" || !strings.HasPrefix(item.Overview, "<div>")
+}
 
 func (c *client) GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error) {
 	workInfo, err := c.GetWorkInfo(ctx, code)
@@ -67,24 +71,22 @@ func asmrOneAdaptor(rjCode string, workInfo *WorkInfoResponse) *model.ProjectInf
 	if err != nil {
 		createDate = time.Now()
 	}
-	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) *model.People {
-		return &model.People{
-			Name:     item.Name,
-			Type:     model.TypeActor,
-			Role:     "CV",
-			Gender:   "female",
-			HomePage: "",
-		}
+	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) string {
+		return item.Name
 	})
+	if len(artist) < 1 {
+		artist = append(artist, "Unknown")
+	}
 	return &model.ProjectInfo{
 		ItemId:          "",
 		Code:            rjCode,
 		Path:            "",
 		Name:            workInfo.Title,
+		Name2:           "",
 		Tags:            tags,
 		ReleaseDate:     releaseDate,
 		CreateDate:      createDate,
-		People:          artist,
+		Artist:          artist,
 		Rating:          workInfo.RateAverage2Dp,
 		Group:           workInfo.Circle.Name,
 		Nsfw:            workInfo.Nsfw,

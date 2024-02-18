@@ -3,15 +3,15 @@ module asmr_scraper
 go 1.21
 
 require (
+	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/gabriel-vasile/mimetype v1.4.2
-	github.com/go-kid/ioc v1.2.7
+	github.com/go-kid/ioc v1.2.13
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/samber/lo v1.38.1
 	github.com/stretchr/testify v1.8.2
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

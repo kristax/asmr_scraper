@@ -19,6 +19,7 @@ type ProjectInfo struct {
 	Tags            []string
 	ReleaseDate     time.Time
 	CreateDate      time.Time
+	Artist          []string
 	People          []*People
 	Rating          float64
 	Group           string
@@ -73,21 +74,17 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 		ParentIndexNumber:       nil,
 		DisplayOrder:            "",
 		Album:                   p.Code,
-		AlbumArtists: lo.Map(p.People, func(item *People, _ int) *jellyfin.Subject {
-			return &jellyfin.Subject{Name: item.Name}
+		AlbumArtists: lo.Map(p.Artist, func(item string, _ int) *jellyfin.Subject {
+			return &jellyfin.Subject{Name: item}
 		}),
-		ArtistItems: []*jellyfin.Subject{{Name: p.Group}},
-		Overview:    p.Overview,
-		Status:      "",
-		AirDays:     []any{},
-		AirTime:     "",
-		Genres:      p.Tags,
-		Tags:        []string{fas.TernaryOp(p.Nsfw, "R18", "全年龄")},
-		Studios: []*jellyfin.Subject{
-			{
-				Name: p.Group,
-			},
-		},
+		ArtistItems:    fas.TernaryOp(p.Group == "", nil, []*jellyfin.Subject{{Name: p.Group}}),
+		Overview:       p.Overview,
+		Status:         "",
+		AirDays:        []any{},
+		AirTime:        "",
+		Genres:         p.Tags,
+		Tags:           []string{fas.TernaryOp(p.Nsfw, "R18", "全年龄")},
+		Studios:        fas.TernaryOp(p.Group == "", nil, []*jellyfin.Subject{{Name: p.Group}}),
 		PremiereDate:   p.ReleaseDate,
 		DateCreated:    p.CreateDate,
 		EndDate:        nil,
@@ -103,7 +100,7 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 				Role: item.Role,
 			}
 		}),
-		LockData:                     true,
+		LockData:                     false,
 		LockedFields:                 []any{},
 		ProviderIds:                  &jellyfin.ProviderIds{},
 		PreferredMetadataLanguage:    "",

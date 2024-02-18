@@ -2,7 +2,6 @@ package jellyfin
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-kid/ioc"
 	"github.com/go-kid/ioc/app"
 	"github.com/go-resty/resty/v2"
@@ -37,5 +36,5 @@ func Test_client_GetItem(t *testing.T) {
 	c := initClient(t)
 	itemInfoResponse, err := c.GetItem(context.Background(), "b808921b42453e40001fe006204aa830")
 	assert.NoError(t, err)
-	fmt.Println(itemInfoResponse.Path)
+	log.Println(itemInfoResponse.Path)
 }

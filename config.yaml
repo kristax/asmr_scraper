@@ -10,7 +10,7 @@ App:
       type: "Movie"
       async: false
       jitter: 5
-      disable: false
+      disable: true
 
 JellyfinConfig:
   host: http://m73:8096
@@ -22,7 +22,7 @@ ScraperConfig:
   query:
     startIndex: 0
     limit: 0
-  forceUpdateInfo: true
+  forceUpdateInfo: false
   forceUploadImage: false
 
 Clients:
@@ -30,10 +30,14 @@ Clients:
     targetName: "Asmr"
     host: https://api.asmr-200.com
     parsePathRegex: "RJ\\d+"
+    forceMissingInfo: false
+    forceMissingImage: false
     debug: false
   JavDBConfig:
     targetName: "Adult"
     host: "https://javdb.com"
     parsePathRegex: "[a-z|A-Z|FC2]+-\\d+[a-z|A-Z]?"
     lang: "zh"
+    forceMissingInfo: false
+    forceMissingImage: false
     debug: false
