@@ -45,7 +45,11 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	if !ok {
 		return nil, fmt.Errorf("none source clients for %s", target.Name)
 	}
-	itemsResponse, err := c.JellyfinClient.GetItems(ctx, target.Id, target.Type, func(r *resty.Request) {
+	id, err := c.JellyfinClient.GetViewIdByName(ctx, target.Name)
+	if err != nil {
+		return nil, err
+	}
+	itemsResponse, err := c.JellyfinClient.GetItems(ctx, id, target.Type, func(r *resty.Request) {
 		if c.Config.Query.StartIndex == 0 && c.Config.Query.Limit == 0 {
 			return
 		}
@@ -55,6 +59,7 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("start refresh media: %s (%s)", target.Name, id)
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println(err)
@@ -64,40 +69,11 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	if total < 1 {
 		return nil, nil
 	}
-	wrappers := c.getProjectsInfo(ctx, itemsResponse.Items, clients)
-	c.updateInfos(ctx, wrappers)
-	//if target.Async {
-	//	wg := sync.WaitGroup{}
-	//	wg.Add(total)
-	//	for i, item := range itemsResponse.Items {
-	//		go func(i int, item *jellyfin.Items) {
-	//			defer wg.Done()
-	//			getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
-	//			if err != nil {
-	//				log.Printf("jelly client get item error: %v %#v\n", err, item)
-	//				return
-	//			}
-	//			err = c.UpdateInfo(ctx, getItem, clients)
-	//			if err != nil {
-	//				log.Printf("jelly client update item failed: %v\n", err)
-	//			}
-	//		}(i, item)
-	//	}
-	//	wg.Wait()
-	//} else {
-	//	for _, item := range itemsResponse.Items {
-	//		getItem, err := c.JellyfinClient.GetItem(ctx, item.Id)
-	//		if err != nil {
-	//			log.Printf("jelly client get item error: %v %#v\n", err, item)
-	//			return nil, err
-	//		}
-	//		err = c.UpdateInfo(ctx, getItem, clients)
-	//		if err != nil {
-	//			log.Printf("jelly client update item failed: %v\n", err)
-	//		}
-	//		time.Sleep(time.Second * time.Duration(target.Jitter))
-	//	}
-	//}
+
+	var wrapperChan = make(chan *projectWrapper)
+
+	c.getProjectsInfo(ctx, itemsResponse.Items, clients, wrapperChan)
+	c.updateInfos(ctx, wrapperChan)
 
 	return &RefreshInfoResult{}, nil
 }
@@ -108,56 +84,61 @@ type projectWrapper struct {
 	missingInfo  bool
 }
 
-func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, clients []SourceClient) []*projectWrapper {
-	var projectInfos []*projectWrapper
-	for _, respItem := range items {
-		item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
-		if err != nil {
-			log.Printf("jelly client get item error: %v %#v\n", err, item.Path)
-			continue
-		}
-		var (
-			projectInfo  *model.ProjectInfo
-			missingImage bool
-			missingInfo  bool
-		)
-		for _, cli := range clients {
-			clientId := reflectx.Id(cli)
-			missingImage = cli.ImageMissing(item)
-			missingInfo = cli.InfoMissing(item)
-			if !missingImage && !missingInfo {
-				continue
-			}
-			code, err := cli.ParseCode(ctx, item)
+func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, clients []SourceClient, wrapperChan chan *projectWrapper) {
+	go func() {
+		for _, respItem := range items {
+			item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
 			if err != nil {
-				log.Printf("client %s parse code failed: %v\n", clientId, err)
+				log.Printf("jelly client get item error: %v %#v\n", err, item.Path)
 				continue
 			}
-			projectInfo, err = cli.GetProjectInfo(ctx, code)
-			if err != nil {
-				log.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
+			var (
+				projectInfo  *model.ProjectInfo
+				missingImage bool
+				missingInfo  bool
+			)
+			for _, cli := range clients {
+				clientId := reflectx.Id(cli)
+				missingImage = cli.ImageMissing(item)
+				missingInfo = cli.InfoMissing(item)
+				if !missingImage && !missingInfo {
+					continue
+				}
+				log.Printf("client %s parse code start\n", clientId)
+				code, err := cli.ParseCode(ctx, item)
+				if err != nil {
+					log.Printf("client %s parse code failed: %v\n", clientId, err)
+					continue
+				}
+				log.Printf("client %s parse code success: %s\n", clientId, code)
+				log.Printf("client %s get project info start\n", clientId)
+				projectInfo, err = cli.GetProjectInfo(ctx, code)
+				if err != nil {
+					log.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
+					continue
+				}
+				log.Printf("client %s get project info success: %s\n", clientId, projectInfo.Name)
+				projectInfo.ItemId = item.Id
+				projectInfo.Path = item.Path
+				projectInfo.Code = code
+				break
+			}
+			if projectInfo == nil && (missingInfo || missingImage) {
+				log.Printf("all clients failed to build project info for %s", item.Path)
 				continue
 			}
-			projectInfo.ItemId = item.Id
-			projectInfo.Path = item.Path
-			projectInfo.Code = code
-			break
+			wrapperChan <- &projectWrapper{
+				projectInfo:  projectInfo,
+				missingImage: missingImage,
+				missingInfo:  missingInfo,
+			}
 		}
-		if projectInfo == nil && (missingInfo || missingImage) {
-			log.Printf("all clients failed to build project info for %s", item.Path)
-			continue
-		}
-		projectInfos = append(projectInfos, &projectWrapper{
-			projectInfo:  projectInfo,
-			missingImage: missingImage,
-			missingInfo:  missingInfo,
-		})
-	}
-	return projectInfos
+		close(wrapperChan)
+	}()
 }
 
-func (c *client) updateInfos(ctx context.Context, wrappers []*projectWrapper) {
-	for _, wrapper := range wrappers {
+func (c *client) updateInfos(ctx context.Context, wrapperChan chan *projectWrapper) {
+	for wrapper := range wrapperChan {
 		if wrapper.missingImage {
 			cover, err := c.Downloader.Download(ctx, wrapper.projectInfo.PrimaryImageUrl)
 			if err != nil {

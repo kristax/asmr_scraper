@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/go-resty/resty/v2"
+	"github.com/samber/lo"
 )
 
 var (
@@ -34,6 +35,39 @@ func (c *client) Init() error {
 			"accept":               "application/json",
 		})
 	return nil
+}
+
+func (c *client) GetViews(ctx context.Context) ([]*ViewItem, error) {
+	var result = &ViewsResponse{}
+	resp, err := c.client.R().
+		SetContext(ctx).
+		SetPathParam("userId", c.Cfg.UserId).
+		SetResult(result).
+		Get("/Users/{userId}/Views")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, errors.New(resp.String())
+	}
+	return result.Items, nil
+}
+
+func (c *client) GetViewIdByName(ctx context.Context, name string) (string, error) {
+	views, err := c.GetViews(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(views) < 1 {
+		return "", errors.New("no view found")
+	}
+	viewItem, ok := lo.Find(views, func(item *ViewItem) bool {
+		return item.Name == name
+	})
+	if !ok {
+		return "", errors.New("no view found for " + name)
+	}
+	return viewItem.Id, nil
 }
 
 func (c *client) GetItems(ctx context.Context, parentId, itemType string, options ...restyop.Option) (*ItemsResponse, error) {

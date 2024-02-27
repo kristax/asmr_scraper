@@ -1,9 +1,7 @@
 package scraper
 
 type Config struct {
-	Query            Query `yaml:"query"`
-	ForceUpdateInfo  bool  `yaml:"forceUpdateInfo"`
-	ForceUploadImage bool  `yaml:"forceUploadImage"`
+	Query Query `yaml:"query"`
 }
 
 func (c *Config) Prefix() string {

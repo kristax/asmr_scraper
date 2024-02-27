@@ -29,7 +29,7 @@ func main() {
 		}
 		_, err = app.Scraper.RefreshInfo(context.Background(), parent)
 		if err != nil {
-			log.Printf("refresh target %s:%s failed %v\n", parent.Id, parent.Name, err)
+			log.Printf("refresh target %s failed: %v\n", parent.Name, err)
 			continue
 		}
 	}

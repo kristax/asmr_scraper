@@ -6,6 +6,8 @@ import (
 )
 
 type Client interface {
+	GetViews(ctx context.Context) ([]*ViewItem, error)
+	GetViewIdByName(ctx context.Context, name string) (string, error)
 	GetItems(ctx context.Context, parentId, itemType string, options ...restyop.Option) (*ItemsResponse, error)
 	GetItem(ctx context.Context, itemId string) (*ItemInfoResponse, error)
 	UpdateItem(ctx context.Context, req *UpdateItemRequest) error

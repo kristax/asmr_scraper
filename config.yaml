@@ -1,16 +1,14 @@
 App:
   targets:
-    - id: "2aa1d857635177546f8785032805c532"
-      name: "Asmr"
+    - name: "ASMR"
       type: "MusicAlbum"
       async: true
-      disable: false
-    - id: "0a7fd8175719d8f7ebfb93874e55a2d5"
-      name: "Adult"
+    #      disable: true
+    - name: "Adult"
       type: "Movie"
       async: false
       jitter: 5
-      disable: true
+#      disable: true
 
 JellyfinConfig:
   host: http://m73:8096
@@ -22,12 +20,10 @@ ScraperConfig:
   query:
     startIndex: 0
     limit: 0
-  forceUpdateInfo: false
-  forceUploadImage: false
 
 Clients:
   AsmrOneConfig:
-    targetName: "Asmr"
+    targetName: "ASMR"
     host: https://api.asmr-200.com
     parsePathRegex: "RJ\\d+"
     forceMissingInfo: false

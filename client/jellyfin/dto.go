@@ -2,6 +2,17 @@ package jellyfin
 
 import "time"
 
+type ViewsResponse struct {
+	Items            []*ViewItem `json:"Items"`
+	TotalRecordCount int         `json:"TotalRecordCount"`
+	StartIndex       int         `json:"StartIndex"`
+}
+
+type ViewItem struct {
+	Name string `json:"Name"`
+	Id   string `json:"Id"`
+}
+
 type ItemsResponse struct {
 	Items            []*Items `json:"Items"`
 	TotalRecordCount int      `json:"TotalRecordCount"`

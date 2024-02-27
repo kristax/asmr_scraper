@@ -41,11 +41,16 @@ func (c *ClientBase) Order() int {
 }
 
 func (c *ClientBase) ParseCode(ctx context.Context, item *jellyfin.ItemInfoResponse) (string, error) {
-	code := c.reg.FindString(item.Path)
-	if code == "" {
-		return "", fmt.Errorf("parse code from path %s failed", item.Path)
+	var sources = []string{
+		item.Name, item.Path, item.SortName, item.ForcedSortName, item.OriginalTitle,
 	}
-	return code, nil
+	for _, source := range sources {
+		code := c.reg.FindString(source)
+		if code != "" {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("parse code failed from sources: %v", sources)
 }
 
 func (c *ClientBase) GetProjectInfo(ctx context.Context, code string) (*ProjectInfo, error) {
