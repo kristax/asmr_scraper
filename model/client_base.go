@@ -9,13 +9,13 @@ import (
 )
 
 type ClientBase struct {
-	TargetName_       string `mapstructure:"targetName"`
-	Order_            int    `mapstructure:"order"`
-	Host              string `mapstructure:"host"`
-	Debug             bool   `mapstructure:"debug"`
-	ParsePathRegex    string `mapstructure:"parsePathRegex"`
-	ForceMissingInfo  bool   `mapstructure:"forceMissingInfo"`
-	ForceMissingImage bool   `mapstructure:"forceMissingImage"`
+	TargetName_       string `yaml:"targetName"`
+	Order_            int    `yaml:"order"`
+	Host              string `yaml:"host"`
+	Debug             bool   `yaml:"debug"`
+	ParsePathRegex    string `yaml:"parsePathRegex"`
+	ForceMissingInfo  bool   `yaml:"forceMissingInfo"`
+	ForceMissingImage bool   `yaml:"forceMissingImage"`
 	Cli               *resty.Client
 	reg               *regexp.Regexp
 }

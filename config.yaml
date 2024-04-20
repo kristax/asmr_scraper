@@ -25,7 +25,7 @@ Clients:
   AsmrOneConfig:
     targetName: "ASMR"
     host: https://api.asmr-200.com
-    parsePathRegex: "RJ\\d+"
+    parsePathRegex: "(RJ|VJ|BJ)\\d+"
     forceMissingInfo: false
     forceMissingImage: false
     debug: false
