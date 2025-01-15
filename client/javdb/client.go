@@ -6,8 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/go-kid/ioc/util/fas"
-	"github.com/samber/lo"
 	"strings"
 	"time"
 )
@@ -15,6 +13,10 @@ import (
 type client struct {
 	model.ClientBase `prop:"Clients.JavDBConfig"`
 	Lang             string `prop:"Clients.JavDBConfig.lang"`
+}
+
+func (c *client) DataModel() model.ProjectInfoData {
+	return &Detail{}
 }
 
 func NewClient() Client {
@@ -135,54 +137,11 @@ func (c *client) getDetail(ctx context.Context, item *ListItem, lang string) (*D
 	return result, nil
 }
 
-func (c *client) GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error) {
-	time.Sleep(time.Second * 5)
+func (c *client) GetData(ctx context.Context, code string) (model.ProjectInfoData, error) {
 	detail, err := c.Get(ctx, code, c.Lang)
 	if err != nil {
 		return nil, err
 	}
-
-	releaseDate, err := time.Parse(time.DateOnly, detail.ReleasedDate)
-	if err != nil {
-		releaseDate = time.Now()
-	}
-	return &model.ProjectInfo{
-		ItemId:      "",
-		Code:        detail.Code,
-		Path:        "",
-		Name:        detail.Title,
-		Name2:       detail.OriginTitle,
-		Tags:        detail.Tags,
-		ReleaseDate: releaseDate,
-		CreateDate:  time.Now(),
-		People: func() []*model.People {
-			var people []*model.People
-			if len(detail.Actors) > 0 {
-				people = append(people, lo.Map(detail.Actors, func(item *Actor, index int) *model.People {
-					return &model.People{
-						Name:     item.Name,
-						Type:     model.TypeActor,
-						Role:     fas.TernaryOp(item.Gender == "male", "男演员", "女优"),
-						Gender:   item.Gender,
-						HomePage: item.HomePage,
-					}
-				})...)
-			}
-			if detail.Director != nil {
-				people = append(people, &model.People{
-					Name:     detail.Director.Name,
-					Type:     model.TypeDirector,
-					HomePage: detail.Director.HomePage,
-				})
-			}
-			return people
-		}(),
-		Rating:          detail.Rating,
-		Group:           detail.Maker,
-		Nsfw:            true,
-		Price:           0,
-		Sales:           0,
-		Overview:        fmt.Sprintf(overviewTemplate, detail.ReleasedDate, detail.Duration, detail.Maker, detail.Publisher, detail.Series),
-		PrimaryImageUrl: detail.CoverImg,
-	}, nil
+	time.Sleep(time.Second * 5)
+	return detail, nil
 }

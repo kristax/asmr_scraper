@@ -6,13 +6,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/samber/lo"
 	"strings"
-	"time"
 )
 
 type client struct {
 	model.ClientBase `prop:"Clients.AsmrOneConfig"`
+}
+
+func (c *client) DataModel() model.ProjectInfoData {
+	return &WorkInfoResponse{}
 }
 
 func NewClient() Client {
@@ -51,48 +53,10 @@ func (c *client) InfoMissing(item *jellyfin.ItemInfoResponse) bool {
 	return c.ClientBase.InfoMissing(item) || item.AlbumArtist == "" || !strings.HasPrefix(item.Overview, "<div>")
 }
 
-func (c *client) GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error) {
+func (c *client) GetData(ctx context.Context, code string) (model.ProjectInfoData, error) {
 	workInfo, err := c.GetWorkInfo(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("asmr one error: %s %v", code, err)
 	}
-	return asmrOneAdaptor(code, workInfo), nil
-}
-
-func asmrOneAdaptor(rjCode string, workInfo *WorkInfoResponse) *model.ProjectInfo {
-	tags := lo.Map[*Tag, string](workInfo.Tags, func(item *Tag, _ int) string {
-		return item.Name
-	})
-	releaseDate, err := time.Parse(time.DateOnly, workInfo.Release)
-	if err != nil {
-		releaseDate = time.Now()
-	}
-	createDate, err := time.Parse(time.DateOnly, workInfo.CreateDate)
-	if err != nil {
-		createDate = time.Now()
-	}
-	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) string {
-		return item.Name
-	})
-	if len(artist) < 1 {
-		artist = append(artist, "Unknown")
-	}
-	return &model.ProjectInfo{
-		ItemId:          "",
-		Code:            rjCode,
-		Path:            "",
-		Name:            workInfo.Title,
-		Name2:           "",
-		Tags:            tags,
-		ReleaseDate:     releaseDate,
-		CreateDate:      createDate,
-		Artist:          artist,
-		Rating:          workInfo.RateAverage2Dp,
-		Group:           workInfo.Circle.Name,
-		Nsfw:            workInfo.Nsfw,
-		Price:           workInfo.Price,
-		Sales:           workInfo.DlCount,
-		Overview:        fmt.Sprintf(overviewTemplate, workInfo.Circle.Name, workInfo.Price, workInfo.DlCount, rjCode),
-		PrimaryImageUrl: workInfo.MainCoverUrl,
-	}
+	return workInfo, nil
 }

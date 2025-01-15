@@ -1,12 +1,16 @@
 package javdb
 
 import (
+	"asmr_scraper/model"
 	"encoding/json"
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-kid/ioc/util/fas"
 	"github.com/samber/lo"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type ListItem struct {
@@ -34,6 +38,52 @@ type Detail struct {
 	Tags         []string
 	Actors       []*Actor
 	Director     *Actor
+}
+
+func (d *Detail) ToProjectInfo(code string) (*model.ProjectInfo, error) {
+	releaseDate, err := time.Parse(time.DateOnly, d.ReleasedDate)
+	if err != nil {
+		releaseDate = time.Now()
+	}
+	return &model.ProjectInfo{
+		ItemId:      "",
+		Code:        d.Code,
+		Path:        "",
+		Name:        d.Title,
+		Name2:       d.OriginTitle,
+		Tags:        d.Tags,
+		ReleaseDate: releaseDate,
+		CreateDate:  time.Now(),
+		People: func() []*model.People {
+			var people []*model.People
+			if len(d.Actors) > 0 {
+				people = append(people, lo.Map(d.Actors, func(item *Actor, index int) *model.People {
+					return &model.People{
+						Name:     item.Name,
+						Type:     model.TypeActor,
+						Role:     fas.TernaryOp(item.Gender == "male", "男演员", "女优"),
+						Gender:   item.Gender,
+						HomePage: item.HomePage,
+					}
+				})...)
+			}
+			if d.Director != nil {
+				people = append(people, &model.People{
+					Name:     d.Director.Name,
+					Type:     model.TypeDirector,
+					HomePage: d.Director.HomePage,
+				})
+			}
+			return people
+		}(),
+		Rating:          d.Rating,
+		Group:           d.Maker,
+		Nsfw:            true,
+		Price:           0,
+		Sales:           0,
+		Overview:        fmt.Sprintf(overviewTemplate, d.ReleasedDate, d.Duration, d.Maker, d.Publisher, d.Series),
+		PrimaryImageUrl: d.CoverImg,
+	}, nil
 }
 
 type Actor struct {

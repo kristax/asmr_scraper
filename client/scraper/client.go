@@ -4,21 +4,26 @@ import (
 	"asmr_scraper/client/downloader"
 	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
+	"asmr_scraper/util/repository"
 	"context"
 	_ "embed"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-kid/ioc/util/reflectx"
 	"github.com/go-resty/resty/v2"
 	"github.com/samber/lo"
+	"gorm.io/gorm"
 	"log"
 	"sort"
 	"strconv"
 )
 
 type client struct {
-	JellyfinClient jellyfin.Client   `wire:""`
-	Clients        []SourceClient    `wire:""`
-	Downloader     downloader.Client `wire:""`
+	JellyfinClient jellyfin.Client       `wire:""`
+	Clients        []SourceClient        `wire:""`
+	Downloader     downloader.Client     `wire:""`
+	Repo           repository.Repository `wire:""`
 	Config         *Config
 
 	clientsMap map[string][]SourceClient
@@ -36,6 +41,12 @@ func (c *client) Init() error {
 		sort.Slice(c.clientsMap[key], func(i, j int) bool {
 			return c.clientsMap[key][i].Order() < c.clientsMap[key][j].Order()
 		})
+	}
+	err := c.Repo.Do(func(db *gorm.DB) any {
+		return db.AutoMigrate(&model.DataCache{})
+	})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -112,9 +123,37 @@ func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, c
 				}
 				log.Printf("client %s parse code success: %s\n", clientId, code)
 				log.Printf("client %s get project info start\n", clientId)
-				projectInfo, err = cli.GetProjectInfo(ctx, code)
+
+				dataCache, err := c.Repo.GetDataCacheByCode(ctx, cli.TargetName(), code)
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					log.Printf("get data %s from db cache failed: %v", code, err)
+					panic(err)
+				}
+				var data model.ProjectInfoData
+				if dataCache != nil {
+					dataModel := cli.DataModel()
+					err := json.Unmarshal(dataCache.Data, dataModel)
+					if err != nil {
+						log.Printf("json unmarshal project info failed: %v", err)
+						panic(err)
+					}
+					data = dataModel
+				} else {
+					data, err = cli.GetData(ctx, code)
+					if err != nil {
+						log.Printf("client %s get %s data failed: %v\n", clientId, code, err)
+						continue
+					}
+					err := c.Repo.SaveDataCache(ctx, model.NewDataCache(clientId, cli.TargetName(), code, data))
+					if err != nil {
+						log.Printf("save project info failed: %v", err)
+						panic(err)
+					}
+				}
+
+				projectInfo, err = data.ToProjectInfo(code)
 				if err != nil {
-					log.Printf("client %s get %s project info failed: %v\n", code, clientId, err)
+					log.Printf("client %s build project info %s failed: %v\n", clientId, code, err)
 					continue
 				}
 				log.Printf("client %s get project info success: %s\n", clientId, projectInfo.Name)

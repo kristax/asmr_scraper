@@ -53,10 +53,6 @@ func (c *ClientBase) ParseCode(ctx context.Context, item *jellyfin.ItemInfoRespo
 	return "", fmt.Errorf("parse code failed from sources: %v", sources)
 }
 
-func (c *ClientBase) GetProjectInfo(ctx context.Context, code string) (*ProjectInfo, error) {
-	panic("implement me")
-}
-
 func (c *ClientBase) ImageMissing(item *jellyfin.ItemInfoResponse) bool {
 	return c.ForceMissingImage || item.ImageTags.Primary == ""
 }

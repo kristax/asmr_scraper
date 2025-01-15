@@ -14,7 +14,8 @@ type SourceClient interface {
 	TargetName() string
 	Order() int
 	ParseCode(ctx context.Context, item *jellyfin.ItemInfoResponse) (string, error)
-	GetProjectInfo(ctx context.Context, code string) (*model.ProjectInfo, error)
+	DataModel() model.ProjectInfoData
+	GetData(ctx context.Context, code string) (model.ProjectInfoData, error)
 	ImageMissing(item *jellyfin.ItemInfoResponse) bool
 	InfoMissing(item *jellyfin.ItemInfoResponse) bool
 }
