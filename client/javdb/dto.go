@@ -7,6 +7,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/go-kid/ioc/util/fas"
 	"github.com/samber/lo"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,16 +41,23 @@ type Detail struct {
 	Director     *Actor
 }
 
-func (d *Detail) ToProjectInfo(code string) (*model.ProjectInfo, error) {
+func (d *Detail) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
+	base := filepath.Base(path)
 	releaseDate, err := time.Parse(time.DateOnly, d.ReleasedDate)
 	if err != nil {
 		releaseDate = time.Now()
 	}
 	return &model.ProjectInfo{
-		ItemId:      "",
-		Code:        d.Code,
-		Path:        "",
-		Name:        d.Title,
+		ItemId: "",
+		Code:   d.Code,
+		Name: func() string {
+			builder := strings.Builder{}
+			if base != code {
+				builder.WriteString(fmt.Sprintf("「%s」 ", base))
+			}
+			builder.WriteString(d.Title)
+			return builder.String()
+		}(),
 		Name2:       d.OriginTitle,
 		Tags:        d.Tags,
 		ReleaseDate: releaseDate,

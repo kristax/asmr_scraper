@@ -13,6 +13,10 @@ type client struct {
 	model.ClientBase `prop:"Clients.AsmrOneConfig"`
 }
 
+func (c *client) ClientID() string {
+	return "AsmrOne"
+}
+
 func (c *client) DataModel() model.ProjectInfoData {
 	return &WorkInfoResponse{}
 }

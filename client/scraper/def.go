@@ -11,6 +11,7 @@ type Client interface {
 }
 
 type SourceClient interface {
+	ClientID() string
 	TargetName() string
 	Order() int
 	ParseCode(ctx context.Context, item *jellyfin.ItemInfoResponse) (string, error)

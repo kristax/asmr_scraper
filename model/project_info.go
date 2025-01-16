@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"github.com/go-kid/ioc/util/fas"
 	"github.com/samber/lo"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
 type ProjectInfoData interface {
-	ToProjectInfo(code string) (*ProjectInfo, error)
+	ToProjectInfo(code, path string) (*ProjectInfo, error)
 }
 
 type ProjectInfo struct {
 	ItemId          string
 	Code            string
-	Path            string
 	Name            string
 	Name2           string
 	Tags            []string
@@ -54,21 +51,13 @@ const (
 )
 
 func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
-	base := filepath.Base(p.Path)
 	artists := lo.Map(p.Artist, func(item string, _ int) *jellyfin.Subject {
 		return &jellyfin.Subject{Name: item}
 	})
 	return &jellyfin.UpdateItemRequest{
-		Id: p.ItemId,
-		Name: func() string {
-			builder := strings.Builder{}
-			if base != p.Code {
-				builder.WriteString(fmt.Sprintf("「%s」 ", base))
-			}
-			builder.WriteString(p.Name)
-			return builder.String()
-		}(),
-		OriginalTitle:           fas.TernaryOp(p.Name2 == "", p.Path, p.Name2),
+		Id:                      p.ItemId,
+		Name:                    p.Name,
+		OriginalTitle:           p.Name2,
 		ForcedSortName:          p.Code,
 		CommunityRating:         fmt.Sprintf("%.2f", p.Rating),
 		CriticRating:            "",

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/samber/lo"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -92,7 +94,8 @@ type WorkInfoResponse struct {
 	MainCoverUrl              string             `json:"mainCoverUrl"`
 }
 
-func (workInfo *WorkInfoResponse) ToProjectInfo(code string) (*model.ProjectInfo, error) {
+func (workInfo *WorkInfoResponse) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
+	base := filepath.Base(path)
 	tags := lo.Map[*Tag, string](workInfo.Tags, func(item *Tag, _ int) string {
 		return item.Name
 	})
@@ -111,11 +114,22 @@ func (workInfo *WorkInfoResponse) ToProjectInfo(code string) (*model.ProjectInfo
 		artist = append(artist, "Unknown")
 	}
 	return &model.ProjectInfo{
-		ItemId:          "",
-		Code:            code,
-		Path:            "",
-		Name:            workInfo.Title,
-		Name2:           "",
+		ItemId: "",
+		Code:   code,
+		Name: func() string {
+			builder := strings.Builder{}
+			if base != code && !lo.Contains([]string{"本編", "本编", "mp3", "MP3"}, base) {
+				builder.WriteString(fmt.Sprintf("「%s」 ", base))
+			}
+			var prefixes = []string{"【简体中文版】", "【簡体中文版】", "【繁体中文版】"}
+			var name = workInfo.Title
+			for _, prefix := range prefixes {
+				name = strings.TrimPrefix(name, prefix)
+			}
+			builder.WriteString(name)
+			return builder.String()
+		}(),
+		Name2:           path,
 		Tags:            tags,
 		ReleaseDate:     releaseDate,
 		CreateDate:      createDate,
@@ -128,42 +142,4 @@ func (workInfo *WorkInfoResponse) ToProjectInfo(code string) (*model.ProjectInfo
 		Overview:        fmt.Sprintf(overviewTemplate, workInfo.Circle.Name, workInfo.Price, workInfo.DlCount, code, code),
 		PrimaryImageUrl: workInfo.MainCoverUrl,
 	}, nil
-}
-
-func asmrOneAdaptor(rjCode string, workInfo *WorkInfoResponse) *model.ProjectInfo {
-	tags := lo.Map[*Tag, string](workInfo.Tags, func(item *Tag, _ int) string {
-		return item.Name
-	})
-	releaseDate, err := time.Parse(time.DateOnly, workInfo.Release)
-	if err != nil {
-		releaseDate = time.Now()
-	}
-	createDate, err := time.Parse(time.DateOnly, workInfo.CreateDate)
-	if err != nil {
-		createDate = time.Now()
-	}
-	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) string {
-		return item.Name
-	})
-	if len(artist) < 1 {
-		artist = append(artist, "Unknown")
-	}
-	return &model.ProjectInfo{
-		ItemId:          "",
-		Code:            rjCode,
-		Path:            "",
-		Name:            workInfo.Title,
-		Name2:           "",
-		Tags:            tags,
-		ReleaseDate:     releaseDate,
-		CreateDate:      createDate,
-		Artist:          artist,
-		Rating:          workInfo.RateAverage2Dp,
-		Group:           workInfo.Circle.Name,
-		Nsfw:            workInfo.Nsfw,
-		Price:           workInfo.Price,
-		Sales:           workInfo.DlCount,
-		Overview:        fmt.Sprintf(overviewTemplate, workInfo.Circle.Name, workInfo.Price, workInfo.DlCount, rjCode, rjCode),
-		PrimaryImageUrl: workInfo.MainCoverUrl,
-	}
 }

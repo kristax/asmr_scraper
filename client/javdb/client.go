@@ -15,6 +15,10 @@ type client struct {
 	Lang             string `prop:"Clients.JavDBConfig.lang"`
 }
 
+func (c *client) ClientID() string {
+	return "JavDB"
+}
+
 func (c *client) DataModel() model.ProjectInfoData {
 	return &Detail{}
 }

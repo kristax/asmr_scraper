@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kid/ioc/util/reflectx"
 	"github.com/go-resty/resty/v2"
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -109,20 +108,17 @@ func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, c
 				missingInfo  bool
 			)
 			for _, cli := range clients {
-				clientId := reflectx.Id(cli)
+				clientId := cli.ClientID()
 				missingImage = cli.ImageMissing(item)
 				missingInfo = cli.InfoMissing(item)
 				if !missingImage && !missingInfo {
 					continue
 				}
-				log.Printf("client %s parse code start\n", clientId)
 				code, err := cli.ParseCode(ctx, item)
 				if err != nil {
-					log.Printf("client %s parse code failed: %v\n", clientId, err)
+					log.Printf("client 「%s」 parse code failed: %v\n", clientId, err)
 					continue
 				}
-				log.Printf("client %s parse code success: %s\n", clientId, code)
-				log.Printf("client %s get project info start\n", clientId)
 
 				dataCache, err := c.Repo.GetDataCacheByCode(ctx, cli.TargetName(), code)
 				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -141,24 +137,23 @@ func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, c
 				} else {
 					data, err = cli.GetData(ctx, code)
 					if err != nil {
-						log.Printf("client %s get %s data failed: %v\n", clientId, code, err)
+						log.Printf("client 「%s」 get %s data failed: %v", clientId, code, err)
 						continue
 					}
 					err := c.Repo.SaveDataCache(ctx, model.NewDataCache(clientId, cli.TargetName(), code, data))
 					if err != nil {
-						log.Printf("save project info failed: %v", err)
+						log.Printf("db cache save data failed: %v", err)
 						panic(err)
 					}
 				}
 
-				projectInfo, err = data.ToProjectInfo(code)
+				projectInfo, err = data.ToProjectInfo(code, item.Path)
 				if err != nil {
-					log.Printf("client %s build project info %s failed: %v\n", clientId, code, err)
+					log.Printf("client 「%s」 build project info %s failed: %v\n", clientId, code, err)
 					continue
 				}
-				log.Printf("client %s get project info success: %s\n", clientId, projectInfo.Name)
+				log.Printf("client 「%s」 get project info success: %s\n", clientId, projectInfo.Name)
 				projectInfo.ItemId = item.Id
-				projectInfo.Path = item.Path
 				projectInfo.Code = code
 				break
 			}
