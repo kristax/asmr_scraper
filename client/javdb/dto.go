@@ -43,6 +43,9 @@ type Detail struct {
 
 func (d *Detail) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
 	base := filepath.Base(path)
+	if idx := strings.Index(base, "."); idx != -1 {
+		base = base[:idx]
+	}
 	releaseDate, err := time.Parse(time.DateOnly, d.ReleasedDate)
 	if err != nil {
 		releaseDate = time.Now()
@@ -52,13 +55,11 @@ func (d *Detail) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
 		Code:   d.Code,
 		Name: func() string {
 			builder := strings.Builder{}
-			if base != code {
-				builder.WriteString(fmt.Sprintf("「%s」 ", base))
-			}
+			builder.WriteString(fmt.Sprintf("「%s」 ", base))
 			builder.WriteString(d.Title)
 			return builder.String()
 		}(),
-		Name2:       d.OriginTitle,
+		Name2:       lo.If(d.OriginTitle != "", d.OriginTitle).Else(path),
 		Tags:        d.Tags,
 		ReleaseDate: releaseDate,
 		CreateDate:  time.Now(),

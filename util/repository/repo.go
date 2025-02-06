@@ -3,7 +3,7 @@ package repository
 import (
 	"asmr_scraper/model"
 	"context"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -16,8 +16,27 @@ func New() Repository {
 	return &repository{}
 }
 
+//func (r *repository) Init() error {
+//	db, err := gorm.Open(sqlite.Open("gorm.db"), &gorm.Config{
+//		Logger: logger.Default.LogMode(logger.Info),
+//	})
+//	if err != nil {
+//		return err
+//	}
+//	r.db = db
+//	return nil
+//}
+
 func (r *repository) Init() error {
-	db, err := gorm.Open(sqlite.Open("gorm.db"), &gorm.Config{
+	dsn := "root:QIANXIAOfanhua123@tcp(kristas.top:13306)/jellyfin_scraper?charset=utf8&parseTime=True&loc=Local"
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		DSN:                       dsn,
+		DefaultStringSize:         256,
+		DisableDatetimePrecision:  true,
+		DontSupportRenameIndex:    true,
+		DontSupportRenameColumn:   true,
+		SkipInitializeWithVersion: false,
+	}), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
