@@ -5,17 +5,21 @@ import (
 	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
 	"asmr_scraper/util/repository"
+	"bufio"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"github.com/gosuri/uiprogress"
 	"github.com/samber/lo"
 	"gorm.io/gorm"
 	"log"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type client struct {
@@ -69,7 +73,7 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("start refresh media: %s (%s)", target.Name, id)
+	//log.Printf("start refresh media: %s (%s)", target.Name, id)
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println(err)
@@ -82,7 +86,7 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 
 	var wrapperChan = make(chan *projectWrapper)
 
-	c.getProjectsInfo(ctx, itemsResponse.Items, clients, wrapperChan)
+	go c.getProjectsInfo(ctx, target, itemsResponse.Items, clients, wrapperChan)
 	c.updateInfos(ctx, wrapperChan)
 
 	return &RefreshInfoResult{}, nil
@@ -94,81 +98,110 @@ type projectWrapper struct {
 	missingInfo  bool
 }
 
-func (c *client) getProjectsInfo(ctx context.Context, items []*jellyfin.Items, clients []SourceClient, wrapperChan chan *projectWrapper) {
-	go func() {
-		for _, respItem := range items {
-			item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
+func (c *client) getProjectsInfo(ctx context.Context, target *model.Target, items []*jellyfin.Items, clients []SourceClient, wrapperChan chan *projectWrapper) {
+	bar := uiprogress.AddBar(len(items))
+	var (
+		index      int
+		total      = len(items)
+		clientName string
+		itemCode   string
+	)
+	bar = bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return fmt.Sprintf("%s %s", target.Name, clientName)
+	})
+	bar = bar.AppendFunc(func(b *uiprogress.Bar) string {
+		return fmt.Sprintf("[%d/%d] %s", index, total, itemCode)
+	})
+
+	for i, respItem := range items {
+		index = i
+		item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
+		if err != nil {
+			log.Printf("jelly client get item error: %v\n", err)
+			continue
+		}
+		var (
+			projectInfo  *model.ProjectInfo
+			missingImage bool
+			missingInfo  bool
+		)
+		for _, cli := range clients {
+			clientId := cli.ClientID()
+			clientName = clientId
+			code, err := cli.ParseCode(ctx, item)
 			if err != nil {
-				log.Printf("jelly client get item error: %v %#v\n", err, item.Path)
+				log.Printf("client 「%s」 parse code failed: %v, input Y to continue, N to exit", clientId, err)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				if strings.ToLower(scanner.Text()) == "y" {
+					continue
+				} else {
+					os.Exit(1)
+				}
+			}
+			itemCode = code
+
+			missingImage = cli.ImageMissing(item)
+			missingInfo = cli.InfoMissing(item)
+			if !missingImage && !missingInfo {
 				continue
 			}
-			var (
-				projectInfo  *model.ProjectInfo
-				missingImage bool
-				missingInfo  bool
-			)
-			for _, cli := range clients {
-				clientId := cli.ClientID()
-				missingImage = cli.ImageMissing(item)
-				missingInfo = cli.InfoMissing(item)
-				if !missingImage && !missingInfo {
-					continue
-				}
-				code, err := cli.ParseCode(ctx, item)
-				if err != nil {
-					log.Printf("client 「%s」 parse code failed: %v\n", clientId, err)
-					continue
-				}
 
-				dataCache, err := c.Repo.GetDataCacheByCode(ctx, cli.TargetName(), code)
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					log.Printf("get data %s from db cache failed: %v", code, err)
+			dataCache, err := c.Repo.GetDataCacheByCode(ctx, cli.TargetName(), code)
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Printf("get data %s from db cache failed: %v", code, err)
+				panic(err)
+			}
+			var data model.ProjectInfoData
+			if dataCache != nil {
+				dataModel := cli.DataModel()
+				err := json.Unmarshal(dataCache.Data, dataModel)
+				if err != nil {
+					log.Printf("json unmarshal project info failed: %v", err)
 					panic(err)
 				}
-				var data model.ProjectInfoData
-				if dataCache != nil {
-					dataModel := cli.DataModel()
-					err := json.Unmarshal(dataCache.Data, dataModel)
-					if err != nil {
-						log.Printf("json unmarshal project info failed: %v", err)
-						panic(err)
-					}
-					data = dataModel
-				} else {
-					data, err = cli.GetData(ctx, code)
-					if err != nil {
-						log.Printf("client 「%s」 get %s data failed: %v", clientId, code, err)
-						continue
-					}
-					err := c.Repo.SaveDataCache(ctx, model.NewDataCache(clientId, cli.TargetName(), code, data))
-					if err != nil {
-						log.Printf("db cache save data failed: %v", err)
-						panic(err)
-					}
-				}
-
-				projectInfo, err = data.ToProjectInfo(code, item.Path)
+				data = dataModel
+			} else {
+				data, err = cli.GetData(ctx, code)
 				if err != nil {
-					log.Printf("client 「%s」 build project info %s failed: %v\n", clientId, code, err)
-					continue
+					log.Printf("client 「%s」 get %s data failed: %v, input Y to continue, N to exit", clientId, code, err)
+					scanner := bufio.NewScanner(os.Stdin)
+					scanner.Scan()
+					if strings.ToLower(scanner.Text()) == "y" {
+						continue
+					} else {
+						os.Exit(1)
+					}
 				}
-				log.Printf("client 「%s」 get project info success: %s\n", clientId, projectInfo.Name)
-				projectInfo.ItemId = item.Id
-				projectInfo.Code = code
-				break
+				err := c.Repo.SaveDataCache(ctx, model.NewDataCache(clientId, cli.TargetName(), code, data))
+				if err != nil {
+					log.Printf("db cache save data failed: %v", err)
+					panic(err)
+				}
 			}
-			if projectInfo == nil && (missingInfo || missingImage) {
-				log.Printf("all clients failed to build project info for %s", item.Path)
+
+			projectInfo, err = data.ToProjectInfo(code, item.Path, item)
+			if err != nil {
+				log.Printf("client 「%s」 build project info %s failed: %v\n", clientId, code, err)
 				continue
 			}
-			wrapperChan <- &projectWrapper{
-				projectInfo:  projectInfo,
-				missingImage: missingImage,
-				missingInfo:  missingInfo,
-			}
+			log.Printf("client 「%s」 get project info success: %s\n", clientId, projectInfo.Name)
+			projectInfo.ItemId = item.Id
+			projectInfo.Code = code
+			break
 		}
-		close(wrapperChan)
-	}()
+		bar.Set(i)
+		if projectInfo == nil && (missingInfo || missingImage) {
+			log.Printf("all clients failed to build project info for %s", item.Path)
+			continue
+		}
+		wrapperChan <- &projectWrapper{
+			projectInfo:  projectInfo,
+			missingImage: missingImage,
+			missingInfo:  missingInfo,
+		}
+	}
+	close(wrapperChan)
 }
 
 func (c *client) updateInfos(ctx context.Context, wrapperChan chan *projectWrapper) {

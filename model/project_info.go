@@ -9,7 +9,7 @@ import (
 )
 
 type ProjectInfoData interface {
-	ToProjectInfo(code, path string) (*ProjectInfo, error)
+	ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse) (*ProjectInfo, error)
 }
 
 type ProjectInfo struct {

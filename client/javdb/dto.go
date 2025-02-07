@@ -1,6 +1,7 @@
 package javdb
 
 import (
+	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
 	"encoding/json"
 	"fmt"
@@ -41,7 +42,7 @@ type Detail struct {
 	Director     *Actor
 }
 
-func (d *Detail) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
+func (d *Detail) ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse) (*model.ProjectInfo, error) {
 	base := filepath.Base(path)
 	if idx := strings.Index(base, "."); idx != -1 {
 		base = base[:idx]
@@ -62,7 +63,7 @@ func (d *Detail) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
 		Name2:       lo.If(d.OriginTitle != "", d.OriginTitle).Else(path),
 		Tags:        d.Tags,
 		ReleaseDate: releaseDate,
-		CreateDate:  time.Now(),
+		CreateDate:  item.DateCreated,
 		People: func() []*model.People {
 			var people []*model.People
 			if len(d.Actors) > 0 {

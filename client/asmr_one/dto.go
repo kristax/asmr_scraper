@@ -1,6 +1,7 @@
 package asmr_one
 
 import (
+	"asmr_scraper/client/jellyfin"
 	"asmr_scraper/model"
 	"encoding/json"
 	"fmt"
@@ -94,7 +95,7 @@ type WorkInfoResponse struct {
 	MainCoverUrl              string             `json:"mainCoverUrl"`
 }
 
-func (workInfo *WorkInfoResponse) ToProjectInfo(code, path string) (*model.ProjectInfo, error) {
+func (workInfo *WorkInfoResponse) ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse) (*model.ProjectInfo, error) {
 	base := filepath.Base(path)
 	tags := lo.Map[*Tag, string](workInfo.Tags, func(item *Tag, _ int) string {
 		return item.Name
@@ -102,10 +103,6 @@ func (workInfo *WorkInfoResponse) ToProjectInfo(code, path string) (*model.Proje
 	releaseDate, err := time.Parse(time.DateOnly, workInfo.Release)
 	if err != nil {
 		releaseDate = time.Now()
-	}
-	createDate, err := time.Parse(time.DateOnly, workInfo.CreateDate)
-	if err != nil {
-		createDate = time.Now()
 	}
 	artist := lo.Map(workInfo.Vas, func(item *Vas, _ int) string {
 		return item.Name
@@ -132,7 +129,7 @@ func (workInfo *WorkInfoResponse) ToProjectInfo(code, path string) (*model.Proje
 		Name2:           path,
 		Tags:            tags,
 		ReleaseDate:     releaseDate,
-		CreateDate:      createDate,
+		CreateDate:      item.DateCreated,
 		Artist:          artist,
 		Rating:          workInfo.RateAverage2Dp,
 		Group:           workInfo.Circle.Name,
