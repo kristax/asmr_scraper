@@ -70,20 +70,12 @@ func (c *client) GetViewIdByName(ctx context.Context, name string) (string, erro
 	return viewItem.Id, nil
 }
 
-func (c *client) GetItems(ctx context.Context, parentId, itemType string, options ...restyop.Option) (*ItemsResponse, error) {
+func (c *client) GetItems(ctx context.Context, parentId string, queryParams map[string]string, options ...restyop.Option) (*ItemsResponse, error) {
 	var result = &ItemsResponse{}
 	r := c.client.R().
 		SetContext(ctx).
-		SetQueryParams(map[string]string{
-			"SortBy":           "DateCreated%2CSortName",
-			"SortOrder":        "Descending",
-			"IncludeItemTypes": itemType,
-			"Recursive":        "true",
-			"Fields":           "PrimaryImageAspectRatio%2CSortName%2CBasicSyncInfo",
-			"ImageTypeLimit":   "1",
-			"EnableImageTypes": "Primary%2CBackdrop%2CBanner%2CThumb",
-			"ParentId":         parentId,
-		}).
+		SetQueryParams(queryParams).
+		SetQueryParam("ParentId", parentId).
 		SetPathParam("userId", c.Cfg.UserId)
 	for _, option := range options {
 		option(r)

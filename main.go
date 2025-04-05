@@ -14,16 +14,22 @@ import (
 )
 
 type App struct {
-	Targets []*model.Target `prop:"App.targets"`
-	Scraper scraper.Client  `wire:""`
+	Targets           []*model.Target `prop:"App.targets"`
+	EnableProgressBar bool            `prop:"EnableProgressBar"`
+	Scraper           scraper.Client  `wire:""`
 }
 
 func main() {
-	uiprogress.Start()
+
 	var app = &App{}
 	_, err := ioc.Run(ap.SetConfig("config.yaml"), ap.SetComponents(app))
 	if err != nil {
 		panic(err)
+	}
+
+	if app.EnableProgressBar {
+		uiprogress.Start()
+		defer uiprogress.Stop()
 	}
 
 	wg := sync.WaitGroup{}
@@ -43,7 +49,6 @@ func main() {
 	}
 
 	wg.Wait()
-	uiprogress.Stop()
 
 	log.Println("refresh finished, press Enter to exit")
 	scanner := bufio.NewScanner(os.Stdin)

@@ -63,7 +63,15 @@ func (c *client) RefreshInfo(ctx context.Context, target *model.Target) (*Refres
 	if err != nil {
 		return nil, err
 	}
-	itemsResponse, err := c.JellyfinClient.GetItems(ctx, id, target.Type, func(r *resty.Request) {
+	itemsResponse, err := c.JellyfinClient.GetItems(ctx, id, map[string]string{
+		"SortBy":           "DateCreated,SortName",
+		"SortOrder":        "Descending",
+		"IncludeItemTypes": target.Type,
+		"Recursive":        "true",
+		"Fields":           "PrimaryImageAspectRatio,SortName",
+		"ImageTypeLimit":   "1",
+		"EnableImageTypes": "Primary,Backdrop,Banner,Thumb",
+	}, func(r *resty.Request) {
 		if c.Config.Query.StartIndex == 0 && c.Config.Query.Limit == 0 {
 			return
 		}
@@ -101,8 +109,6 @@ type projectWrapper struct {
 func (c *client) getProjectsInfo(ctx context.Context, target *model.Target, items []*jellyfin.Items, clients []SourceClient, wrapperChan chan *projectWrapper) {
 	bar := uiprogress.AddBar(len(items))
 	var (
-		index      int
-		total      = len(items)
 		clientName string
 		itemCode   string
 	)
@@ -110,15 +116,33 @@ func (c *client) getProjectsInfo(ctx context.Context, target *model.Target, item
 		return fmt.Sprintf("%s %s", target.Name, clientName)
 	})
 	bar = bar.AppendFunc(func(b *uiprogress.Bar) string {
-		return fmt.Sprintf("[%d/%d] %s", index, total, itemCode)
+		return fmt.Sprintf("[%d/%d] %s", b.Current(), b.Total, itemCode)
 	})
 
-	for i, respItem := range items {
-		index = i
+	for _, respItem := range items {
 		item, err := c.JellyfinClient.GetItem(ctx, respItem.Id)
 		if err != nil {
 			log.Printf("jelly client get item error: %v\n", err)
 			continue
+		}
+		var subItems []*jellyfin.ItemInfoResponse
+		if target.SubItems != nil {
+			respSubItems, err := c.JellyfinClient.GetItems(ctx, item.Id, map[string]string{
+				"Fields": target.SubItems.Fields,
+				"SortBy": target.SubItems.SortBy,
+			})
+			if err != nil {
+				log.Printf("jelly client get sub items error: %v\n", err)
+				continue
+			}
+			for _, respSubItem := range respSubItems.Items {
+				subItem, err := c.JellyfinClient.GetItem(ctx, respSubItem.Id)
+				if err != nil {
+					log.Printf("jelly client get sub items error: %v\n", err)
+					break
+				}
+				subItems = append(subItems, subItem)
+			}
 		}
 		var (
 			projectInfo  *model.ProjectInfo
@@ -130,14 +154,8 @@ func (c *client) getProjectsInfo(ctx context.Context, target *model.Target, item
 			clientName = clientId
 			code, err := cli.ParseCode(ctx, item)
 			if err != nil {
-				log.Printf("client 「%s」 parse code failed: %v, input Y to continue, N to exit", clientId, err)
-				scanner := bufio.NewScanner(os.Stdin)
-				scanner.Scan()
-				if strings.ToLower(scanner.Text()) == "y" {
-					continue
-				} else {
-					os.Exit(1)
-				}
+				c.askForError("client 「%s」 parse code failed: %v, input Y to continue, N to exit", clientId, err)
+				continue
 			}
 			itemCode = code
 
@@ -149,50 +167,40 @@ func (c *client) getProjectsInfo(ctx context.Context, target *model.Target, item
 
 			dataCache, err := c.Repo.GetDataCacheByCode(ctx, cli.TargetName(), code)
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-				log.Printf("get data %s from db cache failed: %v", code, err)
-				panic(err)
+				log.Panicf("get data %s from db cache failed: %v", code, err)
 			}
 			var data model.ProjectInfoData
 			if dataCache != nil {
 				dataModel := cli.DataModel()
 				err := json.Unmarshal(dataCache.Data, dataModel)
 				if err != nil {
-					log.Printf("json unmarshal project info failed: %v", err)
-					panic(err)
+					log.Panicf("json unmarshal project info failed: %v", err)
 				}
 				data = dataModel
 			} else {
 				data, err = cli.GetData(ctx, code)
 				if err != nil {
-					log.Printf("client 「%s」 get %s data failed: %v, input Y to continue, N to exit", clientId, code, err)
-					scanner := bufio.NewScanner(os.Stdin)
-					scanner.Scan()
-					if strings.ToLower(scanner.Text()) == "y" {
-						continue
-					} else {
-						os.Exit(1)
-					}
+					c.askForError("client 「%s」 get %s data failed: %v, input Y to continue, N to exit", clientId, code, err)
+					continue
 				}
 				err := c.Repo.SaveDataCache(ctx, model.NewDataCache(clientId, cli.TargetName(), code, data))
 				if err != nil {
-					log.Printf("db cache save data failed: %v", err)
-					panic(err)
+					log.Panicf("db cache save data failed: %v", err)
 				}
 			}
 
-			projectInfo, err = data.ToProjectInfo(code, item.Path, item)
+			projectInfo, err = data.ToProjectInfo(code, item.Path, item, subItems)
 			if err != nil {
-				log.Printf("client 「%s」 build project info %s failed: %v\n", clientId, code, err)
+				c.askForError("client 「%s」 build project info %s failed: %v\n", clientId, code, err)
 				continue
 			}
-			log.Printf("client 「%s」 get project info success: %s\n", clientId, projectInfo.Name)
 			projectInfo.ItemId = item.Id
 			projectInfo.Code = code
 			break
 		}
-		bar.Set(i)
+		bar.Incr()
 		if projectInfo == nil && (missingInfo || missingImage) {
-			log.Printf("all clients failed to build project info for %s", item.Path)
+			c.askForError("all clients failed to build project info for %s", item.Path)
 			continue
 		}
 		wrapperChan <- &projectWrapper{
@@ -227,6 +235,29 @@ func (c *client) updateInfos(ctx context.Context, wrapperChan chan *projectWrapp
 				return
 			}
 			log.Println("update info for", wrapper.projectInfo.Code, "success")
+			if subItems := wrapper.projectInfo.ItemsInfo; len(subItems) != 0 {
+				for _, subItem := range subItems {
+					err := c.JellyfinClient.UpdateItem(ctx, subItem.ToJellyfinUpdateItemReq())
+					if err != nil {
+						log.Printf("jellyfin update sub item error: %s %v\n", subItem.Name, err)
+					}
+					//log.Printf("update sub item %s -> [%s - %s] %s\n", subItem.Name2, subItem.ParentIndex, subItem.Index, subItem.Name)
+					//bytes, _ := json.Marshal(subItem.ToJellyfinUpdateItemReq())
+					//fmt.Println(string(bytes))
+				}
+			}
 		}
 	}
+}
+
+func (c *client) askForError(format string, v ...any) {
+	uiprogress.Stop()
+	log.Printf(format, v...)
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	if strings.ToLower(scanner.Text()) == "y" {
+		uiprogress.Start()
+		return
+	}
+	os.Exit(1)
 }

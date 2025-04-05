@@ -2,6 +2,7 @@ package model
 
 import (
 	"asmr_scraper/client/jellyfin"
+	"encoding/json"
 	"fmt"
 	"github.com/go-kid/ioc/util/fas"
 	"github.com/samber/lo"
@@ -9,7 +10,7 @@ import (
 )
 
 type ProjectInfoData interface {
-	ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse) (*ProjectInfo, error)
+	ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse, subItems []*jellyfin.ItemInfoResponse) (*ProjectInfo, error)
 }
 
 type ProjectInfo struct {
@@ -17,18 +18,23 @@ type ProjectInfo struct {
 	Code            string
 	Name            string
 	Name2           string
+	SortName        string
+	Index           string
+	ParentIndex     string
 	Tags            []string
 	ReleaseDate     time.Time
 	CreateDate      time.Time
 	Artist          []string
 	People          []*People
 	Rating          float64
-	Group           string
+	Group           []string
 	Nsfw            bool
 	Price           int
 	Sales           int
 	Overview        string
 	PrimaryImageUrl string
+	ProviderIds     json.RawMessage
+	ItemsInfo       []*ProjectInfo
 }
 
 type People struct {
@@ -54,32 +60,35 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 	artists := lo.Map(p.Artist, func(item string, _ int) *jellyfin.Subject {
 		return &jellyfin.Subject{Name: item}
 	})
+	groups := lo.Map(p.Group, func(item string, _ int) *jellyfin.Subject {
+		return &jellyfin.Subject{Name: item}
+	})
 	return &jellyfin.UpdateItemRequest{
 		Id:                      p.ItemId,
 		Name:                    p.Name,
 		OriginalTitle:           p.Name2,
-		ForcedSortName:          p.Code,
+		ForcedSortName:          lo.If(p.SortName != "", p.SortName).Else(p.Code),
 		CommunityRating:         fmt.Sprintf("%.2f", p.Rating),
 		CriticRating:            "",
-		IndexNumber:             nil,
+		IndexNumber:             p.Index,
 		AirsBeforeSeasonNumber:  "",
 		AirsAfterSeasonNumber:   "",
 		AirsBeforeEpisodeNumber: "",
-		ParentIndexNumber:       nil,
+		ParentIndexNumber:       p.ParentIndex,
 		DisplayOrder:            "",
 		Album:                   p.Code,
 		AlbumArtists:            artists,
-		ArtistItems:             append(artists, fas.TernaryOp(p.Group == "", nil, []*jellyfin.Subject{{Name: p.Group}})...),
+		ArtistItems:             append(artists, fas.TernaryOp(len(groups) == 0, nil, groups)...),
 		Overview:                p.Overview,
 		Status:                  "",
 		AirDays:                 []any{},
 		AirTime:                 "",
 		Genres:                  p.Tags,
 		Tags:                    []string{fas.TernaryOp(p.Nsfw, "R18", "全年龄")},
-		Studios:                 fas.TernaryOp(p.Group == "", nil, []*jellyfin.Subject{{Name: p.Group}}),
+		Studios:                 groups,
 		PremiereDate:            p.ReleaseDate,
 		DateCreated:             p.CreateDate,
-		EndDate:                 nil,
+		EndDate:                 "",
 		ProductionYear:          fmt.Sprintf("%d", p.ReleaseDate.Year()),
 		AspectRatio:             "",
 		Video3DFormat:           "",
@@ -94,7 +103,7 @@ func (p *ProjectInfo) ToJellyfinUpdateItemReq() *jellyfin.UpdateItemRequest {
 		}),
 		LockData:                     false,
 		LockedFields:                 []any{},
-		ProviderIds:                  &jellyfin.ProviderIds{},
+		ProviderIds:                  lo.If(p.ProviderIds != nil, p.ProviderIds).Else(json.RawMessage("{}")),
 		PreferredMetadataLanguage:    "",
 		PreferredMetadataCountryCode: "",
 		Taglines:                     []any{},

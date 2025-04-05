@@ -1,14 +1,17 @@
 App:
   targets:
     - name: "ASMR"
+#      disable: true
       type: "MusicAlbum"
       async: true
-    #      disable: true
+      subItems:
+        sortBy: "IndexNumber,Name"
+        fields: "ItemCounts,PrimaryImageAspectRatio,CanDelete,MediaSourceCount"
     - name: "Adult"
       type: "Movie"
       async: false
       jitter: 5
-#      disable: true
+      disable: true
 
 JellyfinConfig:
   host: http://m73:8096
@@ -19,14 +22,14 @@ JellyfinConfig:
 ScraperConfig:
   query:
     startIndex: 0
-    limit: 0
+    limit: 3000
 
 Clients:
   AsmrOneConfig:
     targetName: "ASMR"
     host: https://api.asmr-200.com
     parsePathRegex: "(RJ|VJ|BJ)\\d+"
-    forceMissingInfo: false
+    forceMissingInfo: true
     forceMissingImage: false
     debug: false
   JavDBConfig:
@@ -37,3 +40,5 @@ Clients:
     forceMissingInfo: false
     forceMissingImage: false
     debug: false
+
+EnableProgressBar: false

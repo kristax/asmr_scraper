@@ -42,7 +42,7 @@ type Detail struct {
 	Director     *Actor
 }
 
-func (d *Detail) ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse) (*model.ProjectInfo, error) {
+func (d *Detail) ToProjectInfo(code, path string, item *jellyfin.ItemInfoResponse, subItems []*jellyfin.ItemInfoResponse) (*model.ProjectInfo, error) {
 	base := filepath.Base(path)
 	if idx := strings.Index(base, "."); idx != -1 {
 		base = base[:idx]
@@ -87,7 +87,7 @@ func (d *Detail) ToProjectInfo(code, path string, item *jellyfin.ItemInfoRespons
 			return people
 		}(),
 		Rating:          d.Rating,
-		Group:           d.Maker,
+		Group:           []string{d.Maker},
 		Nsfw:            true,
 		Price:           0,
 		Sales:           0,
